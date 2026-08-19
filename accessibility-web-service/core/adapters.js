@@ -106,7 +106,12 @@ const GeminiAdapter = {
         const parts = [];
         if (entry.text) parts.push({ text: entry.text });
         for (const tc of entry.toolCalls || []) {
-          parts.push({ functionCall: { name: tc.name, args: tc.args, id: tc.id } });
+          const part = { functionCall: { name: tc.name, args: tc.args, id: tc.id } };
+          // Gemini 3 계열은 이전에 받은 thought_signature를 그대로 돌려줘야 다음 턴이 유효합니다.
+          // (병렬 도구 호출 시 첫 functionCall에만 실릴 수 있고, 없는 경우 검증을 건너뛰는
+          //  공식 호환 값(skip_thought_signature_validator)으로 대체합니다.)
+          part.thoughtSignature = tc.thoughtSignature || 'skip_thought_signature_validator';
+          parts.push(part);
         }
         contents.push({ role: 'model', parts });
       } else if (entry.role === 'tool_results') {
@@ -145,7 +150,12 @@ const GeminiAdapter = {
     const textPart = parts.find((p) => p.text);
     const toolCalls = parts
       .filter((p) => p.functionCall)
-      .map((p) => ({ id: p.functionCall.id, name: p.functionCall.name, args: p.functionCall.args }));
+      .map((p) => ({
+        id: p.functionCall.id,
+        name: p.functionCall.name,
+        args: p.functionCall.args,
+        thoughtSignature: p.thoughtSignature, // 다음 턴에 그대로 돌려줘야 하므로 함께 보관
+      }));
     const usageMeta = data.usageMetadata || {};
     const totalTokens = usageMeta.totalTokenCount || 0;
     return { text: textPart ? textPart.text : '', toolCalls, usage: { totalTokens } };
