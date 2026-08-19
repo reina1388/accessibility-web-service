@@ -166,6 +166,27 @@ input, select {
 .btn--secondary:hover { background: #eef2fc; }
 .btn--secondary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+.continue-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn--ghost {
+  background: transparent;
+  color: #6b5a12;
+  border: 1.5px solid #d8c27a;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn--ghost:hover { background: rgba(0,0,0,0.03); }
+.btn--ghost:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .status {
   margin: 16px 0 0;
   font-size: 13.5px;

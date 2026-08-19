@@ -14,14 +14,16 @@ const cacheInfoEl = document.getElementById('cache-info');
 const continueSectionEl = document.getElementById('continue-section');
 const continueTextEl = document.getElementById('continue-text');
 const continueBtn = document.getElementById('continue-btn');
+const finishBtn = document.getElementById('finish-btn');
 
 const SEVERITY_LABEL = { critical: '심각', serious: '높음', moderate: '보통', minor: '낮음' };
 
 const MODELS = {
   gemini: [
-    { value: 'gemini-3.6-flash', label: 'gemini-3.6-flash (권장)' },
-    { value: 'gemini-3.5-flash-lite', label: 'gemini-3.5-flash-lite (빠르고 저렴)' },
-    { value: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview (가장 정교함)' },
+    { value: 'gemini-3.6-flash', label: 'gemini-3.6-flash (권장, 무료 티어)' },
+    { value: 'gemini-3.5-flash', label: 'gemini-3.5-flash (무료 티어)' },
+    { value: 'gemini-3.1-flash-lite', label: 'gemini-3.1-flash-lite (가장 빠르고 저렴, 무료 티어)' },
+    { value: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview (가장 정교함, 무료 티어 없음)' },
   ],
   claude: [
     { value: 'claude-sonnet-5', label: 'claude-sonnet-5 (권장)' },
@@ -108,6 +110,7 @@ async function loadServerMode() {
 
 form.addEventListener('submit', handleSubmit);
 continueBtn.addEventListener('click', handleContinue);
+finishBtn.addEventListener('click', handleFinish);
 
 async function handleSubmit(e) {
   e.preventDefault();
@@ -158,6 +161,28 @@ async function handleContinue() {
   await runCheck(payload);
 
   continueBtn.disabled = false;
+}
+
+async function handleFinish() {
+  if (!currentSessionId) return;
+  finishBtn.disabled = true;
+
+  const sessionIdToClose = currentSessionId;
+  currentSessionId = null;
+  continueSectionEl.hidden = true;
+  setStatus('지금까지 확인한 결과로 마쳤습니다.');
+
+  try {
+    await fetch('/api/check/finish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionIdToClose }),
+    });
+  } catch (e) {
+    // 정리 요청이 실패해도 방문자 입장에서는 이미 결과를 확정한 상태이므로 무시합니다.
+  } finally {
+    finishBtn.disabled = false;
+  }
 }
 
 async function runCheck(payload) {
@@ -224,8 +249,8 @@ function handleEvent(event) {
     const count = (event.findings || []).length;
     continueTextEl.textContent =
       count > 0
-        ? `지금까지 ${count}건을 확인했습니다. 계속 검사하시겠습니까?`
-        : '지금까지 조사를 진행했습니다. 계속 검사하시겠습니까?';
+        ? `위에 지금까지 확인된 ${count}건이 표시되어 있습니다. 계속 검사해서 더 찾아볼까요?`
+        : '아직 확정된 결과가 없습니다. 계속 검사할까요?';
     continueSectionEl.hidden = false;
     setStatus(`일부 결과 확인 · ${event.pageTitle || event.pageUrl}`);
   } else if (event.type === 'done') {
