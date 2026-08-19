@@ -221,6 +221,16 @@ input, select {
 
 .summary { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 0; }
 
+.download-section {
+  margin: 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.download-section .hint { margin: 0; }
+
 .summary__chip { font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px; color: #fff; }
 .summary__chip--critical { background: var(--critical); }
 .summary__chip--serious { background: var(--serious); }

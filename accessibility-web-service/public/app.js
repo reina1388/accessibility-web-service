@@ -15,6 +15,9 @@ const continueSectionEl = document.getElementById('continue-section');
 const continueTextEl = document.getElementById('continue-text');
 const continueBtn = document.getElementById('continue-btn');
 const finishBtn = document.getElementById('finish-btn');
+const downloadSectionEl = document.getElementById('download-section');
+const downloadTxtBtn = document.getElementById('download-txt-btn');
+const downloadHtmlBtn = document.getElementById('download-html-btn');
 
 const SEVERITY_LABEL = { critical: '심각', serious: '높음', moderate: '보통', minor: '낮음' };
 
@@ -75,6 +78,7 @@ const ownKeyDescEl = document.getElementById('own-key-desc');
 let currentSessionId = null;
 let currentUsesOwnKey = false;
 let serverMode = 'admin'; // 서버(관리자)가 정한 운영 모드. /api/mode로 조회해서 채워짐.
+let lastReport = null; // 완료된 검사 결과 (문서 다운로드용)
 
 initPage();
 
@@ -111,6 +115,12 @@ async function loadServerMode() {
 form.addEventListener('submit', handleSubmit);
 continueBtn.addEventListener('click', handleContinue);
 finishBtn.addEventListener('click', handleFinish);
+downloadTxtBtn.addEventListener('click', () => {
+  if (lastReport) downloadTextReport(lastReport);
+});
+downloadHtmlBtn.addEventListener('click', () => {
+  if (lastReport) downloadHtmlReport(lastReport);
+});
 
 async function handleSubmit(e) {
   e.preventDefault();
@@ -123,7 +133,9 @@ async function handleSubmit(e) {
   // 새 검사를 시작하는 것이므로 이전 세션은 버립니다.
   currentSessionId = null;
   currentUsesOwnKey = false;
+  lastReport = null;
   continueSectionEl.hidden = true;
+  downloadSectionEl.hidden = true;
   resultsEl.innerHTML = '';
   summaryEl.hidden = true;
   agentLogEl.hidden = false;
@@ -267,6 +279,15 @@ function handleEvent(event) {
       `검사 완료 · ${event.pageTitle || event.pageUrl} · 총 ${event.findings.length}건의 위반 항목` +
         (event.grade ? ` · 준수 등급 ${event.grade} (${event.score}/100)` : '')
     );
+
+    lastReport = {
+      pageUrl: event.pageUrl,
+      pageTitle: event.pageTitle,
+      score: event.score,
+      grade: event.grade,
+      findings: event.findings,
+    };
+    downloadSectionEl.hidden = false;
   }
 }
 
@@ -335,6 +356,132 @@ async function refreshCacheInfo() {
   } catch (e) {
     cacheInfoEl.textContent = '';
   }
+}
+
+// ── 문서 다운로드 (.txt / .html) ────────────────────────────
+// 스크린샷은 파일 용량을 크게 키우므로 제외하고, 텍스트 정보만 담습니다.
+
+function reportFileBaseName(report) {
+  const safeHost = (() => {
+    try {
+      return new URL(report.pageUrl).hostname;
+    } catch (e) {
+      return 'report';
+    }
+  })();
+  return `accessibility-report-${safeHost}-${Date.now()}`;
+}
+
+function triggerDownload(content, mimeType, filename) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// 마크다운 기호(#, ** 등) 없이 줄바꿈과 구분선만으로 구성한 순수 텍스트
+function buildPlainTextReport(report) {
+  const lines = [];
+  const divider = '='.repeat(50);
+  const subDivider = '-'.repeat(50);
+
+  lines.push('웹 접근성 검사 리포트');
+  lines.push(divider);
+  lines.push(`검사 대상: ${report.pageUrl}`);
+  lines.push(`페이지 제목: ${report.pageTitle || '(제목 없음)'}`);
+  lines.push(`생성 일시: ${new Date().toLocaleString('ko-KR')}`);
+  if (report.grade) lines.push(`준수 등급: ${report.grade} (${report.score}/100)`);
+  lines.push(`총 위반 항목: ${report.findings.length}건`);
+  lines.push('');
+  lines.push('※ 스크린샷은 문서저장 시 제외됩니다. 문제 위치는 웹 화면에서 확인해주세요.');
+  lines.push(divider);
+  lines.push('');
+
+  report.findings.forEach((f, index) => {
+    const severity = SEVERITY_LABEL[f.severity] || f.severity;
+    lines.push(`${index + 1}. ${f.title} (${severity})`);
+    if (f.kwcagRef) lines.push(`   관련 KWCAG: ${f.kwcagRef}`);
+    if (f.verified) lines.push('   [AI가 실제로 검증한 수정안]');
+    lines.push('');
+    lines.push('   [무엇이 문제인가요]');
+    lines.push(`   ${f.explanation || ''}`);
+    lines.push('');
+    lines.push('   [어떻게 수정하나요]');
+    lines.push(`   ${f.howToFix || ''}`);
+    lines.push('');
+    if (f.selector) lines.push(`   선택자: ${f.selector}`);
+    lines.push('');
+    lines.push(subDivider);
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
+function downloadTextReport(report) {
+  triggerDownload(buildPlainTextReport(report), 'text/plain;charset=utf-8', `${reportFileBaseName(report)}.txt`);
+}
+
+// 더블클릭하면 바로 브라우저로 열리는 독립형 HTML 문서
+function buildHtmlReport(report) {
+  const genDate = new Date().toLocaleString('ko-KR');
+  const items = report.findings
+    .map((f, index) => {
+      const severity = SEVERITY_LABEL[f.severity] || f.severity;
+      return `
+      <div class="item">
+        <h2>${index + 1}. ${escapeHtml(f.title)} <span class="badge">${escapeHtml(severity)}</span>${
+        f.verified ? ' <span class="verified">✓ AI 검증됨</span>' : ''
+      }</h2>
+        ${f.kwcagRef ? `<p class="ref">관련 KWCAG: ${escapeHtml(f.kwcagRef)}</p>` : ''}
+        <p class="label">무엇이 문제인가요</p>
+        <p>${escapeHtml(f.explanation || '')}</p>
+        <p class="label">어떻게 수정하나요</p>
+        <p>${escapeHtml(f.howToFix || '')}</p>
+        ${f.selector ? `<code>${escapeHtml(f.selector)}</code>` : ''}
+      </div>`;
+    })
+    .join('\n');
+
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>웹 접근성 검사 리포트 - ${escapeHtml(report.pageTitle || report.pageUrl)}</title>
+<style>
+  body { font-family: -apple-system, "Malgun Gothic", system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1a2233; line-height: 1.6; }
+  h1 { font-size: 22px; }
+  .meta { font-size: 13px; color: #5b6472; margin-bottom: 8px; }
+  .disclaimer { background: #fff8e6; border: 1px solid #f0d98c; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin: 16px 0; }
+  .item { border-top: 1px solid #e2e5ea; padding: 16px 0; }
+  h2 { font-size: 16px; }
+  .badge { font-size: 11px; font-weight: 700; color: #fff; background: #ad5700; padding: 2px 8px; border-radius: 999px; }
+  .verified { font-size: 12px; color: #0f7a3d; font-weight: 700; }
+  .ref { font-size: 12px; color: #2455c9; }
+  .label { font-size: 12px; font-weight: 700; color: #5b6472; margin: 10px 0 2px; }
+  code { display: inline-block; margin-top: 6px; background: #f5f6f8; padding: 3px 8px; border-radius: 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>웹 접근성 검사 리포트</h1>
+  <p class="meta">검사 대상: ${escapeHtml(report.pageUrl)}</p>
+  <p class="meta">페이지 제목: ${escapeHtml(report.pageTitle || '(제목 없음)')}</p>
+  <p class="meta">생성 일시: ${genDate}</p>
+  ${report.grade ? `<p class="meta">준수 등급: ${escapeHtml(report.grade)} (${report.score}/100)</p>` : ''}
+  <p class="meta">총 위반 항목: ${report.findings.length}건</p>
+  <div class="disclaimer">※ 스크린샷은 문서저장 시 제외됩니다. 문제 위치는 웹 화면에서 확인해주세요.</div>
+  ${items}
+</body>
+</html>`;
+}
+
+function downloadHtmlReport(report) {
+  triggerDownload(buildHtmlReport(report), 'text/html;charset=utf-8', `${reportFileBaseName(report)}.html`);
 }
 
 function escapeHtml(str) {
