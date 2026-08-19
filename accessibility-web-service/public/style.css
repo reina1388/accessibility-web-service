@@ -110,6 +110,35 @@ input, select {
 .btn--primary:hover { background: var(--accent-dark); }
 .btn--primary:disabled { background: #9fb0d6; cursor: not-allowed; }
 
+.continue-section {
+  margin: 16px 0;
+  padding: 16px;
+  background: #fff8e6;
+  border: 1px solid #f0d98c;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.continue-section p {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  color: #6b5a12;
+}
+
+.btn--secondary {
+  background: #fff;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn--secondary:hover { background: #eef2fc; }
+.btn--secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .status {
   margin: 16px 0 0;
   font-size: 13.5px;
@@ -167,6 +196,14 @@ input, select {
 .card__section-label { font-size: 12.5px; font-weight: 700; color: var(--text-muted); margin: 12px 0 4px; }
 .card__text { margin: 0; font-size: 14px; }
 .card__selector { display: inline-block; margin-top: 10px; font-family: monospace; font-size: 12px; background: var(--bg); padding: 4px 8px; border-radius: 6px; }
+
+.card__screenshot {
+  display: block;
+  max-width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
 
 .footer { text-align: center; padding: 20px; font-size: 12px; color: var(--text-muted); }
 

@@ -79,7 +79,9 @@ const ClaudeAdapter = {
     const toolCalls = data.content
       .filter((b) => b.type === 'tool_use')
       .map((b) => ({ id: b.id, name: b.name, args: b.input }));
-    return { text: textBlock ? textBlock.text : '', toolCalls };
+    const usage = data.usage || {};
+    const totalTokens = (usage.input_tokens || 0) + (usage.output_tokens || 0);
+    return { text: textBlock ? textBlock.text : '', toolCalls, usage: { totalTokens } };
   },
 };
 
@@ -144,7 +146,9 @@ const GeminiAdapter = {
     const toolCalls = parts
       .filter((p) => p.functionCall)
       .map((p) => ({ id: p.functionCall.id, name: p.functionCall.name, args: p.functionCall.args }));
-    return { text: textPart ? textPart.text : '', toolCalls };
+    const usageMeta = data.usageMetadata || {};
+    const totalTokens = usageMeta.totalTokenCount || 0;
+    return { text: textPart ? textPart.text : '', toolCalls, usage: { totalTokens } };
   },
 };
 
@@ -205,7 +209,9 @@ const OpenAIAdapter = {
       name: tc.function.name,
       args: safeJsonParse(tc.function.arguments),
     }));
-    return { text: message.content || '', toolCalls };
+    const usage = data.usage || {};
+    const totalTokens = usage.total_tokens || 0;
+    return { text: message.content || '', toolCalls, usage: { totalTokens } };
   },
 };
 

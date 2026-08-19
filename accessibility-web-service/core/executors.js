@@ -136,6 +136,19 @@ function relativeLuminance({ r, g, b }) {
   return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
 }
 
+// 문제 요소를 스크린샷으로 캡처합니다 (리포트에 "여기가 문제입니다"로 첨부).
+// 실패해도(요소를 못 찾거나 화면 밖에 있는 등) null을 반환할 뿐 전체 검사를 막지 않습니다.
+async function captureElementScreenshot(page, selector) {
+  try {
+    const locator = page.locator(selector).first();
+    await locator.scrollIntoViewIfNeeded({ timeout: 3000 });
+    const buffer = await locator.screenshot({ timeout: 5000 });
+    return `data:image/png;base64,${buffer.toString('base64')}`;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function executeTool(name, args, page, domain) {
   switch (name) {
     case 'axe_scan':
@@ -155,4 +168,4 @@ async function executeTool(name, args, page, domain) {
   }
 }
 
-module.exports = { executeTool };
+module.exports = { executeTool, captureElementScreenshot };

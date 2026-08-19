@@ -11,6 +11,9 @@ const agentLogCountEl = document.getElementById('agent-log-count');
 const summaryEl = document.getElementById('summary');
 const resultsEl = document.getElementById('results');
 const cacheInfoEl = document.getElementById('cache-info');
+const continueSectionEl = document.getElementById('continue-section');
+const continueTextEl = document.getElementById('continue-text');
+const continueBtn = document.getElementById('continue-btn');
 
 const SEVERITY_LABEL = { critical: '심각', serious: '높음', moderate: '보통', minor: '낮음' };
 
@@ -31,6 +34,9 @@ const MODELS = {
     { value: 'gpt-4.1', label: 'gpt-4.1 (안정적인 구버전)' },
   ],
 };
+
+// 토큰 한도에 걸려 일시정지된 검사를 이어가기 위한 현재 세션 ID
+let currentSessionId = null;
 
 function populateModels(provider, selectedModel) {
   modelSelect.innerHTML = '';
@@ -68,15 +74,44 @@ loadSavedSettings();
 refreshCacheInfo();
 
 form.addEventListener('submit', handleSubmit);
+continueBtn.addEventListener('click', handleContinue);
 
 async function handleSubmit(e) {
   e.preventDefault();
   saveCurrentSettings();
 
+  // 새 검사를 시작하는 것이므로 이전 세션은 버립니다.
+  currentSessionId = null;
+  continueSectionEl.hidden = true;
   resultsEl.innerHTML = '';
   summaryEl.hidden = true;
   agentLogEl.hidden = false;
   agentLogListEl.innerHTML = '';
+
+  await runCheck({
+    url: urlInput.value.trim(),
+    provider: providerSelect.value,
+    model: modelSelect.value,
+    apiKey: apiKeyInput.value.trim(),
+  });
+}
+
+async function handleContinue() {
+  if (!currentSessionId) return;
+  continueBtn.disabled = true;
+  continueSectionEl.hidden = true;
+
+  await runCheck({
+    sessionId: currentSessionId,
+    provider: providerSelect.value,
+    model: modelSelect.value,
+    apiKey: apiKeyInput.value.trim(),
+  });
+
+  continueBtn.disabled = false;
+}
+
+async function runCheck(payload) {
   submitBtn.disabled = true;
   setStatus('요청을 보내는 중...');
 
@@ -84,12 +119,7 @@ async function handleSubmit(e) {
     const response = await fetch('/api/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: urlInput.value.trim(),
-        provider: providerSelect.value,
-        model: modelSelect.value,
-        apiKey: apiKeyInput.value.trim(),
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok || !response.body) {
@@ -132,14 +162,36 @@ function handleEvent(event) {
     logAgentStep(event.text, event.done);
   } else if (event.type === 'error') {
     setStatus(`오류: ${event.message}`);
+    currentSessionId = null;
+  } else if (event.type === 'paused') {
+    currentSessionId = event.sessionId;
+
+    if (event.findings && event.findings.length > 0) {
+      renderSummary(event.findings);
+      renderResults(event.findings);
+    }
+
+    const count = (event.findings || []).length;
+    continueTextEl.textContent =
+      count > 0
+        ? `지금까지 ${count}건을 확인했습니다. 계속 검사하시겠습니까?`
+        : '지금까지 조사를 진행했습니다. 계속 검사하시겠습니까?';
+    continueSectionEl.hidden = false;
+    setStatus(`일부 결과 확인 · ${event.pageTitle || event.pageUrl}`);
   } else if (event.type === 'done') {
+    currentSessionId = null;
+    continueSectionEl.hidden = true;
+
     if (!event.findings || event.findings.length === 0) {
       setStatus('접근성 위반 항목을 발견하지 못했습니다.');
       return;
     }
     renderSummary(event.findings);
     renderResults(event.findings);
-    setStatus(`검사 완료 · ${event.pageTitle || event.pageUrl} · 총 ${event.findings.length}건의 위반 항목`);
+    setStatus(
+      `검사 완료 · ${event.pageTitle || event.pageUrl} · 총 ${event.findings.length}건의 위반 항목` +
+        (event.grade ? ` · 준수 등급 ${event.grade} (${event.score}/100)` : '')
+    );
   }
 }
 
@@ -189,6 +241,11 @@ function renderResults(findings) {
         <p class="card__section-label">어떻게 수정하나요</p>
         <p class="card__text">${escapeHtml(f.howToFix)}</p>
         ${f.selector ? `<code class="card__selector">${escapeHtml(f.selector)}</code>` : ''}
+        ${
+          f.screenshotDataUrl
+            ? `<p class="card__section-label">문제 위치</p><img class="card__screenshot" src="${f.screenshotDataUrl}" alt="${escapeHtml(f.title)} 문제 요소 스크린샷" />`
+            : ''
+        }
       </div>
     `;
     resultsEl.appendChild(card);
