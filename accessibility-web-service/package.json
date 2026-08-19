@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check core/tools.js && node --check core/adapters.js && node --check core/cache.js && node --check core/executors.js && node --check core/agentLoop.js && node --check public/app.js && echo '✅ 문법 검사 통과'"
+    "check": "node --check server.js && node --check core/tools.js && node --check core/adapters.js && node --check core/cache.js && node --check core/executors.js && node --check core/agentLoop.js && node --check core/serverConfig.js && node --check core/adminAuth.js && node --check core/rateLimit.js && node --check public/app.js && node --check public/admin.js && echo '✅ 문법 검사 통과'"
   },
   "dependencies": {
     "express": "^4.19.2",

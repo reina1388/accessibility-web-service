@@ -5,17 +5,20 @@ const { chromium } = require('playwright');
 const { runAgentLoop, DEFAULT_TOKEN_LIMIT } = require('./core/agentLoop');
 const { captureElementScreenshot } = require('./core/executors');
 const { getCacheSize, clearCache } = require('./core/cache');
+const serverConfig = require('./core/serverConfig');
+const adminAuth = require('./core/adminAuth');
+const rateLimit = require('./core/rateLimit');
 
 const app = express();
+app.set('trust proxy', true); // Render는 프록시 뒤에 있어서, 실제 방문자 IP를 얻으려면 필요합니다.
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PAGE_LOAD_TIMEOUT_MS = 30000;
 const SESSION_TTL_MS = 5 * 60 * 1000; // 5분간 "계속 검사"를 안 누르면 세션 정리
+const VALID_PROVIDERS = ['claude', 'gemini', 'openai'];
 
 // 검사량이 많아 잠시 멈춘 경우, 이어서 진행하기 위한 세션 저장소
-// (브라우저/페이지를 살려둔 채로, 다음 요청에서 이어서 진행합니다)
-// 한도 자체는 사용자에게 노출하지 않는 내부 운영 값입니다 (core/agentLoop.js의 DEFAULT_TOKEN_LIMIT).
 const sessions = new Map();
 
 setInterval(() => {
@@ -39,7 +42,6 @@ function computeScoreAndGrade(findings) {
   return { score, grade };
 }
 
-// 위반 항목마다 문제 요소의 스크린샷을 캡처해 붙입니다 ("여기가 문제입니다" 증거).
 async function attachScreenshots(page, findings, onStep) {
   const withEvidence = [];
   for (const f of findings) {
@@ -53,8 +55,30 @@ async function attachScreenshots(page, findings, onStep) {
   return withEvidence;
 }
 
+// 관리자가 정한 운영 모드에 따라 자격증명을 결정합니다.
+// - admin 모드: 방문자 입력은 무시하고 항상 서버(관리자) 키를 씁니다.
+// - visitor 모드: 방문자가 공급자/모델/API 키를 반드시 함께 보내야 합니다.
+function resolveCredentials(body) {
+  const cfg = serverConfig.getRuntimeConfig();
+
+  if (cfg.mode === 'visitor') {
+    if (!body.apiKey || !body.provider || !VALID_PROVIDERS.includes(body.provider) || !body.model) {
+      throw new Error('이 서비스는 방문자가 직접 공급자/모델/API 키를 입력해야 검사할 수 있습니다.');
+    }
+    return { provider: body.provider, model: body.model, apiKey: body.apiKey, isOwnKey: true };
+  }
+
+  // admin 모드
+  if (!cfg.apiKey) {
+    throw new Error('관리자가 아직 이 서비스의 API 키를 설정하지 않았습니다.');
+  }
+  return { provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey, isOwnKey: false };
+}
+
+// ── 방문자용: 웹 접근성 검사 ─────────────────────────────────
 app.post('/api/check', async (req, res) => {
-  const { url, provider, apiKey, model, sessionId } = req.body || {};
+  const { url, sessionId, provider, model, apiKey } = req.body || {};
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
 
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
@@ -68,10 +92,23 @@ app.post('/api/check', async (req, res) => {
       res.end();
       return;
     }
-    if (!apiKey) {
-      send({ type: 'error', message: 'apiKey가 필요합니다.' });
-      res.end();
-      return;
+
+    let apiKeyToUse;
+    if (session.isOwnKey) {
+      if (!apiKey) {
+        send({ type: 'error', message: '직접 입력한 키로 시작한 검사입니다. 계속하려면 API 키를 다시 입력해주세요.' });
+        res.end();
+        return;
+      }
+      apiKeyToUse = apiKey;
+    } else {
+      const cfg = serverConfig.getRuntimeConfig();
+      if (!cfg.apiKey) {
+        send({ type: 'error', message: '관리자가 설정한 기본 API 키를 더 이상 사용할 수 없습니다.' });
+        res.end();
+        return;
+      }
+      apiKeyToUse = cfg.apiKey;
     }
 
     session.lastUsedAt = Date.now();
@@ -79,7 +116,7 @@ app.post('/api/check', async (req, res) => {
     try {
       const result = await runAgentLoop({
         provider: session.provider,
-        apiKey,
+        apiKey: apiKeyToUse,
         model: session.model,
         page: session.page,
         domain: session.domain,
@@ -129,13 +166,33 @@ app.post('/api/check', async (req, res) => {
   }
 
   // ── 새 검사 시작 ──────────────────────────────────────────
-  if (!url || !provider || !apiKey || !model) {
-    send({ type: 'error', message: 'url, provider, apiKey, model은 모두 필수입니다.' });
+  let creds;
+  try {
+    creds = resolveCredentials({ provider, model, apiKey });
+  } catch (err) {
+    send({ type: 'error', message: err.message });
     res.end();
     return;
   }
-  if (!['claude', 'gemini', 'openai'].includes(provider)) {
-    send({ type: 'error', message: `알 수 없는 공급자: ${provider}` });
+
+  // 관리자 키를 쓰는 요청만 엄격히 제한합니다 (운영자 비용 보호 목적).
+  // 방문자가 자기 키를 쓰는 경우는 서버 자원(헤드리스 브라우저) 보호를 위한 더 넉넉한 한도만 적용합니다.
+  const limited = creds.isOwnKey
+    ? rateLimit.isRateLimited(`own:${ip}`, { max: 20 })
+    : rateLimit.isRateLimited(`shared:${ip}`);
+  if (limited) {
+    send({
+      type: 'error',
+      message: creds.isOwnKey
+        ? '요청이 너무 잦습니다. 잠시 후 다시 시도해주세요.'
+        : `기본 제공 검사는 1시간에 최대 ${rateLimit.MAX_REQUESTS_PER_WINDOW}회까지 가능합니다. 더 많이 쓰시려면 직접 API 키를 입력해주세요.`,
+    });
+    res.end();
+    return;
+  }
+
+  if (!url) {
+    send({ type: 'error', message: 'url은 필수입니다.' });
     res.end();
     return;
   }
@@ -163,9 +220,9 @@ app.post('/api/check', async (req, res) => {
     const domain = parsedUrl.hostname;
 
     const result = await runAgentLoop({
-      provider,
-      apiKey,
-      model,
+      provider: creds.provider,
+      apiKey: creds.apiKey,
+      model: creds.model,
       page,
       domain,
       tokenLimit: DEFAULT_TOKEN_LIMIT,
@@ -188,13 +245,13 @@ app.post('/api/check', async (req, res) => {
       });
       await browser.close();
     } else {
-      // 검사량이 많아 잠시 멈춤 — 세션을 저장해두고 브라우저는 살려둠
       const newSessionId = crypto.randomUUID();
       sessions.set(newSessionId, {
         browser,
         page,
-        provider,
-        model,
+        provider: creds.provider,
+        model: creds.model,
+        isOwnKey: creds.isOwnKey,
         domain,
         url,
         pageTitle,
@@ -208,11 +265,11 @@ app.post('/api/check', async (req, res) => {
         type: 'paused',
         done: false,
         sessionId: newSessionId,
+        usingOwnKey: creds.isOwnKey,
         findings: findingsWithEvidence,
         pageUrl: url,
         pageTitle,
       });
-      // 주의: 여기서는 browser.close()를 호출하지 않습니다 (이어서 진행하기 위해 살려둠).
     }
   } catch (err) {
     send({ type: 'error', message: err.message });
@@ -222,12 +279,44 @@ app.post('/api/check', async (req, res) => {
   }
 });
 
+app.get('/api/mode', (req, res) => {
+  res.json(serverConfig.getPublicMode());
+});
+
 app.get('/api/cache-status', (req, res) => {
   res.json({ size: getCacheSize() });
 });
 
-app.post('/api/cache-clear', (req, res) => {
+app.post('/api/cache-clear', adminAuth.requireAdmin, (req, res) => {
   res.json(clearCache());
+});
+
+// ── 관리자 전용 ──────────────────────────────────────────────
+app.post('/api/admin/login', (req, res) => {
+  try {
+    const token = adminAuth.login((req.body || {}).password);
+    res.json({ token });
+  } catch (err) {
+    res.status(401).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/config', adminAuth.requireAdmin, (req, res) => {
+  res.json(serverConfig.getPublicConfig());
+});
+
+app.post('/api/admin/config', adminAuth.requireAdmin, (req, res) => {
+  const { mode, provider, model, apiKey } = req.body || {};
+  if (mode && !serverConfig.VALID_MODES.includes(mode)) {
+    res.status(400).json({ error: `알 수 없는 모드: ${mode}` });
+    return;
+  }
+  if (provider && !VALID_PROVIDERS.includes(provider)) {
+    res.status(400).json({ error: `알 수 없는 공급자: ${provider}` });
+    return;
+  }
+  serverConfig.updateConfig({ mode, provider, model, apiKey });
+  res.json(serverConfig.getPublicConfig());
 });
 
 const PORT = process.env.PORT || 3000;
