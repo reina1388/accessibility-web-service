@@ -1,0 +1,19 @@
+{
+  "name": "accessibility-web-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "URL을 입력하면 헤드리스 브라우저로 열어 AI 에이전트가 웹 접근성(KWCAG 2.1)을 검사하는 웹 서비스",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check core/tools.js && node --check core/adapters.js && node --check core/cache.js && node --check core/executors.js && node --check core/agentLoop.js && node --check public/app.js && echo '✅ 문법 검사 통과'"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "playwright": "1.62.0",
+    "axe-core": "^4.10.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

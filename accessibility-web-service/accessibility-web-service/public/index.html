@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>웹 접근성 검증 AI Agent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="hero__inner">
+      <span class="hero__mark">A11y Agent</span>
+      <h1>웹 접근성 검증 AI Agent</h1>
+      <p class="hero__sub">URL을 입력하면 AI 에이전트가 페이지를 직접 열어 접근성을 검사하고, 문제점과 수정 방법을 안내합니다.</p>
+      <a class="hero__download" href="/downloads/accessibility-agent-extension.zip" download>
+        🧩 크롬 확장 프로그램으로도 사용하기 (zip 다운로드)
+      </a>
+    </div>
+  </header>
+
+  <main class="container">
+    <form id="check-form" class="panel">
+      <label for="url">검사할 웹페이지 URL</label>
+      <input id="url" type="url" placeholder="https://example.com" required />
+
+      <div class="form-row">
+        <div>
+          <label for="provider">AI 공급자</label>
+          <select id="provider">
+            <option value="gemini">Gemini (Google)</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="openai">OpenAI (GPT)</option>
+          </select>
+        </div>
+        <div>
+          <label for="model">모델</label>
+          <select id="model"></select>
+        </div>
+      </div>
+
+      <label for="api-key">API 키</label>
+      <input id="api-key" type="password" placeholder="공급자별 API 키" required />
+      <p class="hint">
+        키는 이 브라우저의 localStorage에만 저장되고, 검사 요청 시 서버로 전달되어 해당 공급자 API 호출에만 쓰입니다.
+        서버는 요청 처리가 끝나면 키를 저장하지 않습니다.
+      </p>
+
+      <button type="submit" id="submit-btn" class="btn btn--primary">검사하기</button>
+    </form>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <details id="agent-log" class="agent-log" hidden>
+      <summary>에이전트 활동 로그 <span id="agent-log-count"></span></summary>
+      <ol id="agent-log-list"></ol>
+    </details>
+
+    <section id="continue-section" class="continue-section" hidden>
+      <p id="continue-text"></p>
+      <button id="continue-btn" type="button" class="btn btn--secondary">▶ 계속 검사하기</button>
+    </section>
+
+    <section id="summary" class="summary" hidden></section>
+    <section id="results" class="results"></section>
+  </main>
+
+  <footer class="footer">
+    <span id="cache-info"></span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
