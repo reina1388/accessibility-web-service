@@ -283,6 +283,18 @@ app.get('/api/mode', (req, res) => {
   res.json(serverConfig.getPublicMode());
 });
 
+// 방문자가 "계속하기" 대신 지금까지의 결과로 마치기로 했을 때, 살려둔 브라우저/세션을 정리합니다.
+// (findings는 어차피 pause 시점에 이미 클라이언트로 전달했으므로, 여기서는 자원 정리만 합니다.)
+app.post('/api/check/finish', (req, res) => {
+  const { sessionId } = req.body || {};
+  const session = sessions.get(sessionId);
+  if (session) {
+    session.browser.close().catch(() => {});
+    sessions.delete(sessionId);
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/cache-status', (req, res) => {
   res.json({ size: getCacheSize() });
 });
