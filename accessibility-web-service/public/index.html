@@ -23,27 +23,23 @@
       <label for="url">검사할 웹페이지 URL</label>
       <input id="url" type="url" placeholder="https://example.com" required />
 
-      <div class="form-row">
-        <div>
-          <label for="provider">AI 공급자</label>
-          <select id="provider">
-            <option value="gemini">Gemini (Google)</option>
-            <option value="claude">Claude (Anthropic)</option>
-            <option value="openai">OpenAI (GPT)</option>
-          </select>
-        </div>
-        <div>
-          <label for="model">모델</label>
-          <select id="model"></select>
-        </div>
-      </div>
+      <section id="own-key-section" class="own-key-section" hidden>
+        <p class="hint" id="own-key-desc" style="margin-top:0;"></p>
 
-      <label for="api-key">API 키</label>
-      <input id="api-key" type="password" placeholder="공급자별 API 키" required />
-      <p class="hint">
-        키는 이 브라우저의 localStorage에만 저장되고, 검사 요청 시 서버로 전달되어 해당 공급자 API 호출에만 쓰입니다.
-        서버는 요청 처리가 끝나면 키를 저장하지 않습니다.
-      </p>
+        <label for="own-provider">AI 공급자</label>
+        <select id="own-provider">
+          <option value="gemini">Gemini (Google)</option>
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="openai">OpenAI (GPT)</option>
+        </select>
+
+        <label for="own-model">모델</label>
+        <select id="own-model"></select>
+
+        <label for="own-api-key">API 키</label>
+        <input id="own-api-key" type="password" placeholder="API 키 입력" autocomplete="off" />
+        <p class="hint">이 브라우저의 localStorage에만 저장되고, 검사 요청에만 함께 전달됩니다.</p>
+      </section>
 
       <button type="submit" id="submit-btn" class="btn btn--primary">검사하기</button>
     </form>

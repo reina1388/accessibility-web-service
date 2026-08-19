@@ -1,8 +1,8 @@
 const form = document.getElementById('check-form');
 const urlInput = document.getElementById('url');
-const providerSelect = document.getElementById('provider');
-const modelSelect = document.getElementById('model');
-const apiKeyInput = document.getElementById('api-key');
+const ownProviderSelect = document.getElementById('own-provider');
+const ownModelSelect = document.getElementById('own-model');
+const ownApiKeyInput = document.getElementById('own-api-key');
 const submitBtn = document.getElementById('submit-btn');
 const statusEl = document.getElementById('status');
 const agentLogEl = document.getElementById('agent-log');
@@ -35,65 +35,106 @@ const MODELS = {
   ],
 };
 
-// 토큰 한도에 걸려 일시정지된 검사를 이어가기 위한 현재 세션 ID
-let currentSessionId = null;
-
-function populateModels(provider, selectedModel) {
-  modelSelect.innerHTML = '';
+function populateOwnModels(provider, selected) {
+  ownModelSelect.innerHTML = '';
   MODELS[provider].forEach((m) => {
     const opt = document.createElement('option');
     opt.value = m.value;
     opt.textContent = m.label;
-    modelSelect.appendChild(opt);
+    ownModelSelect.appendChild(opt);
   });
-  if (selectedModel) modelSelect.value = selectedModel;
+  if (selected) ownModelSelect.value = selected;
 }
 
-// ── 로컬 저장 (브라우저에만 저장, 서버로는 요청 시에만 전달) ─────
-function loadSavedSettings() {
-  const provider = localStorage.getItem('a11y_provider') || 'gemini';
-  providerSelect.value = provider;
-  populateModels(provider, localStorage.getItem(`a11y_model_${provider}`));
-  apiKeyInput.value = localStorage.getItem(`a11y_key_${provider}`) || '';
-}
-
-function saveCurrentSettings() {
-  const provider = providerSelect.value;
-  localStorage.setItem('a11y_provider', provider);
-  localStorage.setItem(`a11y_model_${provider}`, modelSelect.value);
-  localStorage.setItem(`a11y_key_${provider}`, apiKeyInput.value);
-}
-
-providerSelect.addEventListener('change', () => {
-  const provider = providerSelect.value;
-  populateModels(provider, localStorage.getItem(`a11y_model_${provider}`));
-  apiKeyInput.value = localStorage.getItem(`a11y_key_${provider}`) || '';
+ownProviderSelect.addEventListener('change', () => {
+  populateOwnModels(ownProviderSelect.value, localStorage.getItem(`a11y_own_model_${ownProviderSelect.value}`));
 });
 
-loadSavedSettings();
-refreshCacheInfo();
+function loadOwnKeySettings() {
+  const provider = localStorage.getItem('a11y_own_provider') || 'gemini';
+  ownProviderSelect.value = provider;
+  populateOwnModels(provider, localStorage.getItem(`a11y_own_model_${provider}`));
+  ownApiKeyInput.value = localStorage.getItem(`a11y_own_key_${provider}`) || '';
+}
+
+function saveOwnKeySettings() {
+  const provider = ownProviderSelect.value;
+  localStorage.setItem('a11y_own_provider', provider);
+  localStorage.setItem(`a11y_own_model_${provider}`, ownModelSelect.value);
+  if (ownApiKeyInput.value.trim()) {
+    localStorage.setItem(`a11y_own_key_${provider}`, ownApiKeyInput.value.trim());
+  }
+}
+
+const ownKeySectionEl = document.getElementById('own-key-section');
+const ownKeyDescEl = document.getElementById('own-key-desc');
+
+// 검사량이 많아 잠시 멈춘 경우, 이어서 진행하기 위한 현재 세션 ID
+let currentSessionId = null;
+let currentUsesOwnKey = false;
+let serverMode = 'admin'; // 서버(관리자)가 정한 운영 모드. /api/mode로 조회해서 채워짐.
+
+initPage();
+
+async function initPage() {
+  await loadServerMode();
+  loadOwnKeySettings();
+  refreshCacheInfo();
+}
+
+async function loadServerMode() {
+  try {
+    const res = await fetch('/api/mode');
+    const data = await res.json();
+    serverMode = data.mode;
+
+    if (serverMode === 'visitor') {
+      ownKeySectionEl.hidden = false;
+      ownKeyDescEl.textContent = '이 서비스는 방문자가 직접 API 키를 입력해야 검사할 수 있습니다.';
+      ownApiKeyInput.required = true;
+      // 관리자가 추천해둔 기본 공급자/모델로 미리 채워줍니다 (방문자가 바꿀 수 있음).
+      if (!localStorage.getItem('a11y_own_provider')) {
+        ownProviderSelect.value = data.provider;
+        populateOwnModels(data.provider, data.model);
+      }
+    } else {
+      ownKeySectionEl.hidden = true;
+      ownApiKeyInput.required = false;
+    }
+  } catch (e) {
+    // 조회 실패 시 기본값(관리자 모드)으로 동작 — own-key-section은 숨김 상태 유지
+  }
+}
 
 form.addEventListener('submit', handleSubmit);
 continueBtn.addEventListener('click', handleContinue);
 
 async function handleSubmit(e) {
   e.preventDefault();
-  saveCurrentSettings();
+
+  if (serverMode === 'visitor' && !ownApiKeyInput.value.trim()) {
+    setStatus('이 서비스는 API 키를 입력해야 검사할 수 있습니다.');
+    return;
+  }
 
   // 새 검사를 시작하는 것이므로 이전 세션은 버립니다.
   currentSessionId = null;
+  currentUsesOwnKey = false;
   continueSectionEl.hidden = true;
   resultsEl.innerHTML = '';
   summaryEl.hidden = true;
   agentLogEl.hidden = false;
   agentLogListEl.innerHTML = '';
 
-  await runCheck({
-    url: urlInput.value.trim(),
-    provider: providerSelect.value,
-    model: modelSelect.value,
-    apiKey: apiKeyInput.value.trim(),
-  });
+  const payload = { url: urlInput.value.trim() };
+  if (serverMode === 'visitor') {
+    saveOwnKeySettings();
+    payload.provider = ownProviderSelect.value;
+    payload.model = ownModelSelect.value;
+    payload.apiKey = ownApiKeyInput.value.trim();
+  }
+
+  await runCheck(payload);
 }
 
 async function handleContinue() {
@@ -101,12 +142,20 @@ async function handleContinue() {
   continueBtn.disabled = true;
   continueSectionEl.hidden = true;
 
-  await runCheck({
-    sessionId: currentSessionId,
-    provider: providerSelect.value,
-    model: modelSelect.value,
-    apiKey: apiKeyInput.value.trim(),
-  });
+  const payload = { sessionId: currentSessionId };
+  if (currentUsesOwnKey) {
+    if (!ownApiKeyInput.value.trim()) {
+      setStatus('직접 입력한 키로 시작한 검사입니다. "내 API 키로 직접 테스트하기"를 펼쳐서 키를 다시 입력해주세요.');
+      continueSectionEl.hidden = false;
+      continueBtn.disabled = false;
+      return;
+    }
+    payload.provider = ownProviderSelect.value;
+    payload.model = ownModelSelect.value;
+    payload.apiKey = ownApiKeyInput.value.trim();
+  }
+
+  await runCheck(payload);
 
   continueBtn.disabled = false;
 }
@@ -165,6 +214,7 @@ function handleEvent(event) {
     currentSessionId = null;
   } else if (event.type === 'paused') {
     currentSessionId = event.sessionId;
+    currentUsesOwnKey = !!event.usingOwnKey;
 
     if (event.findings && event.findings.length > 0) {
       renderSummary(event.findings);
