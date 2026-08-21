@@ -79,6 +79,7 @@ let currentSessionId = null;
 let currentUsesOwnKey = false;
 let serverMode = 'admin'; // 서버(관리자)가 정한 운영 모드. /api/mode로 조회해서 채워짐.
 let lastReport = null; // 완료된 검사 결과 (문서 다운로드용)
+let lastPausedData = null; // 일시정지 시점의 결과 (계속하지 않고 "여기까지" 확정할 때 사용)
 
 initPage();
 
@@ -134,6 +135,7 @@ async function handleSubmit(e) {
   currentSessionId = null;
   currentUsesOwnKey = false;
   lastReport = null;
+  lastPausedData = null;
   continueSectionEl.hidden = true;
   downloadSectionEl.hidden = true;
   resultsEl.innerHTML = '';
@@ -183,6 +185,18 @@ async function handleFinish() {
   currentSessionId = null;
   continueSectionEl.hidden = true;
   setStatus('지금까지 확인한 결과로 마쳤습니다.');
+
+  // 일시정지 시점까지 확인된 결과를 최종 결과로 확정하고, 다운로드 버튼을 노출합니다.
+  if (lastPausedData && lastPausedData.findings.length > 0) {
+    lastReport = {
+      pageUrl: lastPausedData.pageUrl,
+      pageTitle: lastPausedData.pageTitle,
+      score: null,
+      grade: null,
+      findings: lastPausedData.findings,
+    };
+    downloadSectionEl.hidden = false;
+  }
 
   try {
     await fetch('/api/check/finish', {
@@ -257,6 +271,12 @@ function handleEvent(event) {
       renderSummary(event.findings);
       renderResults(event.findings);
     }
+
+    lastPausedData = {
+      pageUrl: event.pageUrl,
+      pageTitle: event.pageTitle,
+      findings: event.findings || [],
+    };
 
     const count = (event.findings || []).length;
     continueTextEl.textContent =
