@@ -220,6 +220,7 @@ input, select {
 .agent-log-item--done { color: var(--text); }
 
 .summary { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 0; }
+.summary[hidden] { display: none; }
 
 .download-section {
   margin: 14px 0;
@@ -227,6 +228,10 @@ input, select {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.download-section[hidden] {
+  display: none;
 }
 
 .download-section .hint { margin: 0; }
