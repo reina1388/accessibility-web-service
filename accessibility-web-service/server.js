@@ -8,6 +8,9 @@ const { getCacheSize, clearCache } = require('./core/cache');
 const serverConfig = require('./core/serverConfig');
 const adminAuth = require('./core/adminAuth');
 const rateLimit = require('./core/rateLimit');
+const { computeScoreAndGrade } = require('./core/scoring');
+const monitorsStore = require('./core/monitors');
+const scheduler = require('./core/scheduler');
 
 const app = express();
 app.set('trust proxy', true); // Render는 프록시 뒤에 있어서, 실제 방문자 IP를 얻으려면 필요합니다.
@@ -30,17 +33,6 @@ setInterval(() => {
     }
   }
 }, 60 * 1000);
-
-function computeScoreAndGrade(findings) {
-  const weights = { critical: 10, serious: 5, moderate: 2, minor: 1 };
-  const penalty = findings.reduce((sum, f) => sum + (weights[f.severity] || 1), 0);
-  const score = Math.max(0, 100 - penalty);
-  let grade = 'D';
-  if (score >= 90) grade = 'A';
-  else if (score >= 75) grade = 'B';
-  else if (score >= 60) grade = 'C';
-  return { score, grade };
-}
 
 async function attachScreenshots(page, findings, onStep) {
   const withEvidence = [];
@@ -330,6 +322,80 @@ app.post('/api/admin/config', adminAuth.requireAdmin, (req, res) => {
   serverConfig.updateConfig({ mode, provider, model, apiKey });
   res.json(serverConfig.getPublicConfig());
 });
+
+// ── 관리자 전용: 정기 모니터링 ──────────────────────────────────
+// 등록해둔 URL을 스케줄러가 주기적으로(하루 1회 또는 콘텐츠 변경 감지 시) 자동 검사합니다.
+app.get('/api/admin/monitors', adminAuth.requireAdmin, (req, res) => {
+  res.json({
+    monitors: monitorsStore.listMonitors(),
+    max: monitorsStore.MAX_MONITORS,
+    settings: monitorsStore.getSettings(),
+  });
+});
+
+app.post('/api/admin/monitors/settings', adminAuth.requireAdmin, (req, res) => {
+  try {
+    const settings = monitorsStore.updateSettings(req.body || {});
+    res.json({ settings });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/monitors', adminAuth.requireAdmin, (req, res) => {
+  const { url } = req.body || {};
+  if (!url) {
+    res.status(400).json({ error: 'url이 필요합니다.' });
+    return;
+  }
+  try {
+    new URL(url);
+  } catch (e) {
+    res.status(400).json({ error: '올바른 URL 형식이 아닙니다.' });
+    return;
+  }
+  try {
+    const monitor = monitorsStore.addMonitor(url);
+    res.json({ monitor: { id: monitor.id, url: monitor.url, enabled: monitor.enabled, createdAt: monitor.createdAt } });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/monitors/:id', adminAuth.requireAdmin, (req, res) => {
+  const removed = monitorsStore.removeMonitor(req.params.id);
+  res.json({ removed });
+});
+
+app.get('/api/admin/monitors/:id/history', adminAuth.requireAdmin, (req, res) => {
+  const monitor = monitorsStore.getMonitor(req.params.id);
+  if (!monitor) {
+    res.status(404).json({ error: '해당 모니터를 찾을 수 없습니다.' });
+    return;
+  }
+  res.json({ url: monitor.url, history: monitor.history });
+});
+
+app.post('/api/admin/monitors/:id/check-now', adminAuth.requireAdmin, async (req, res) => {
+  const monitor = monitorsStore.getMonitor(req.params.id);
+  if (!monitor) {
+    res.status(404).json({ error: '해당 모니터를 찾을 수 없습니다.' });
+    return;
+  }
+  const cfg = serverConfig.getRuntimeConfig();
+  if (!cfg.apiKey) {
+    res.status(400).json({ error: '관리자가 아직 API 키를 설정하지 않았습니다.' });
+    return;
+  }
+  try {
+    const entry = await scheduler.checkOneMonitor(monitor, cfg, { force: true });
+    res.json({ entry });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+scheduler.startScheduler();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
