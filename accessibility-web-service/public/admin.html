@@ -8,119 +8,194 @@
   <meta name="robots" content="noindex, nofollow" />
 </head>
 <body>
-  <header class="hero hero--compact">
-    <div class="hero__inner">
-      <span class="hero__mark">A11y Agent · 관리자</span>
-      <h1>서비스 설정</h1>
-      <p class="hero__sub">이 페이지는 관리자 전용입니다. 방문자에게 링크를 공유하지 마세요.</p>
+  <a class="skip-link" href="#admin-main">본문으로 건너뛰기</a>
+
+  <!-- 아이콘: Feather Icons (MIT License) -->
+  <header class="topbar">
+    <div class="topbar__inner">
+      <span class="brand">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        A11y Agent <span class="brand__tag">관리자</span>
+      </span>
+      <nav class="topbar__nav" aria-label="바로가기">
+        <a class="keep" href="/">사이트 보기</a>
+        <button id="logout-btn" type="button" class="keep" hidden>로그아웃</button>
+      </nav>
     </div>
   </header>
 
-  <main class="container">
-    <section id="login-panel" class="panel">
+  <main id="admin-main">
+    <section id="login-panel" class="panel login-card" aria-labelledby="login-title">
+      <h1 id="login-title" class="panel__title">관리자 로그인</h1>
+      <p class="hint" style="margin:0 0 14px;">이 페이지는 관리자 전용입니다. 방문자에게 링크를 공유하지 마세요.</p>
       <label for="password">관리자 비밀번호</label>
-      <input id="password" type="password" placeholder="비밀번호 입력" />
+      <input id="password" type="password" placeholder="비밀번호 입력" autocomplete="current-password" />
       <button id="login-btn" type="button" class="btn btn--primary">로그인</button>
-      <p id="login-msg" class="hint"></p>
+      <p id="login-msg" class="hint" role="alert"></p>
     </section>
 
-    <section id="dashboard-panel" class="panel" hidden>
-      <div class="dash-header">
-        <strong>📊 접근성 모니터링 대시보드</strong>
-        <button id="dash-refresh-btn" type="button" class="btn btn--ghost" style="width:auto;padding:6px 12px;font-size:12px;">새로고침</button>
-      </div>
-      <p id="dash-msg" class="hint"></p>
-      <div id="dash-summary" class="dash-summary"></div>
-      <div id="dash-table"></div>
-      <div id="dash-top"></div>
-    </section>
+    <div id="config-panel" class="admin-shell" hidden>
+      <nav class="side" aria-label="관리자 메뉴">
+        <button type="button" class="side__item" data-view="dashboard" aria-current="page">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          대시보드
+        </button>
+        <button type="button" class="side__item" data-view="monitoring">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          모니터링
+        </button>
+        <button type="button" class="side__item" data-view="ai">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          AI 설정
+        </button>
+        <button type="button" class="side__item" data-view="system">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          시스템
+        </button>
+      </nav>
 
-    <section id="config-panel" class="panel" hidden>
-      <label>운영 모드</label>
-      <div class="mode-options">
-        <label class="mode-option">
-          <input type="radio" name="mode" value="admin" />
-          <div>
-            <strong>관리자 키 사용</strong>
-            <p class="hint" style="margin:2px 0 0;">방문자는 URL만 입력합니다. 검사 비용은 관리자(운영자)가 부담합니다.</p>
+      <div class="admin-content">
+        <!-- ── 대시보드 ── -->
+        <section id="dashboard-panel" data-view-panel="dashboard" aria-labelledby="title-dashboard">
+          <div class="view-head">
+            <h1 id="title-dashboard">대시보드</h1>
+            <button id="dash-refresh-btn" type="button" class="btn btn--ghost btn--sm">새로고침</button>
           </div>
-        </label>
-        <label class="mode-option">
-          <input type="radio" name="mode" value="visitor" />
-          <div>
-            <strong>방문자 직접 입력</strong>
-            <p class="hint" style="margin:2px 0 0;">방문자가 자기 공급자/모델/API 키를 반드시 입력해야 검사할 수 있습니다. 관리자에게 비용이 청구되지 않습니다.</p>
+          <p id="dash-msg" class="hint" role="status"></p>
+
+          <div class="panel">
+            <h2 class="panel__title">설정 상태</h2>
+            <ul id="dash-checklist" class="checklist"><li class="detail">확인하는 중…</li></ul>
           </div>
-        </label>
+
+          <div id="dash-summary" class="dash-summary"></div>
+
+          <div class="dash-grid">
+            <div class="panel">
+              <h2 class="panel__title">위반 건수 추이</h2>
+              <p class="hint" style="margin:0;">전체 URL의 최근 검사 결과 합계</p>
+              <div id="dash-trend"></div>
+            </div>
+            <div class="panel">
+              <h2 class="panel__title">최근 활동</h2>
+              <ul id="dash-activity" class="activity"></ul>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2 class="panel__title">URL별 현황</h2>
+            <div id="dash-table"></div>
+            <div id="dash-top"></div>
+          </div>
+        </section>
+
+        <!-- ── 모니터링 ── -->
+        <section data-view-panel="monitoring" aria-labelledby="title-monitoring" hidden>
+          <div class="view-head"><h1 id="title-monitoring">모니터링</h1></div>
+
+          <div class="panel">
+            <h2 class="panel__title">자동 검사 설정</h2>
+            <p class="hint" style="margin:0 0 14px;">
+              등록한 URL을 선택한 주기마다 자동으로 검사하고, 결과를 저장소에 쌓아 대시보드에 보여줍니다.
+              새로 등록한 URL은 다음 확인 시점(최대 10분 이내)에 처음 검사됩니다.
+            </p>
+            <p class="hint" id="storage-note" style="margin:0 0 14px;"></p>
+
+            <label class="mode-option" for="monitor-enabled-toggle" style="margin-bottom:14px;">
+              <input type="checkbox" id="monitor-enabled-toggle" />
+              <div>
+                <strong>정기 모니터링 사용</strong>
+                <p class="hint" style="margin:2px 0 0;">꺼두면 등록된 URL이 있어도 자동 검사가 실행되지 않습니다 ("지금 검사" 수동 실행은 계속 가능).</p>
+              </div>
+            </label>
+
+            <div class="field-row">
+              <label for="monitor-cycle">검사 주기</label>
+              <select id="monitor-cycle">
+                <option value="daily">하루</option>
+                <option value="weekly">일주일</option>
+                <option value="biweekly">2주</option>
+                <option value="monthly">한 달(30일)</option>
+              </select>
+              <button id="monitor-settings-save-btn" type="button" class="btn btn--secondary btn--sm">저장</button>
+            </div>
+            <p id="monitor-settings-msg" class="hint" role="status"></p>
+          </div>
+
+          <div class="panel">
+            <h2 class="panel__title">모니터링 URL <span class="hint">(최대 <span id="monitor-max">5</span>개)</span></h2>
+            <div class="monitor-add-row" style="margin-top:12px;">
+              <label for="monitor-url" class="sr-only">모니터링할 URL</label>
+              <input id="monitor-url" type="url" placeholder="https://example.com" />
+              <button id="monitor-add-btn" type="button" class="btn btn--primary">등록</button>
+            </div>
+            <p id="monitor-msg" class="hint" role="status"></p>
+            <div id="monitor-list"></div>
+          </div>
+        </section>
+
+        <!-- ── AI 설정 ── -->
+        <section data-view-panel="ai" aria-labelledby="title-ai" hidden>
+          <div class="view-head"><h1 id="title-ai">AI 설정</h1></div>
+
+          <div class="panel">
+            <h2 class="panel__title">운영 모드</h2>
+            <div class="mode-options" style="margin-top:12px;">
+              <label class="mode-option">
+                <input type="radio" name="mode" value="admin" />
+                <div>
+                  <strong>관리자 키 사용</strong>
+                  <p class="hint" style="margin:2px 0 0;">방문자는 URL만 입력합니다. 검사 비용은 관리자(운영자)가 부담합니다.</p>
+                </div>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="mode" value="visitor" />
+                <div>
+                  <strong>방문자 직접 입력</strong>
+                  <p class="hint" style="margin:2px 0 0;">방문자가 자기 공급자/모델/API 키를 반드시 입력해야 검사할 수 있습니다. 관리자에게 비용이 청구되지 않습니다.</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2 class="panel__title">공급자 · 모델 · API 키</h2>
+            <p class="hint" id="key-panel-desc" style="margin:0 0 4px;"></p>
+
+            <label for="provider">공급자</label>
+            <select id="provider">
+              <option value="gemini">Gemini (Google)</option>
+              <option value="claude">Claude (Anthropic)</option>
+              <option value="openai">OpenAI (GPT)</option>
+            </select>
+
+            <label for="model">모델</label>
+            <select id="model"></select>
+
+            <label for="api-key" id="api-key-label">API 키</label>
+            <input id="api-key" type="password" placeholder="새 키를 입력할 때만 값을 채워주세요" autocomplete="off" />
+            <p id="key-status" class="hint"></p>
+
+            <button id="save-btn" type="button" class="btn btn--primary" style="margin-top:16px;">저장</button>
+            <p id="save-msg" class="hint" role="status"></p>
+          </div>
+        </section>
+
+        <!-- ── 시스템 ── -->
+        <section data-view-panel="system" aria-labelledby="title-system" hidden>
+          <div class="view-head"><h1 id="title-system">시스템</h1></div>
+
+          <div class="panel">
+            <h2 class="panel__title">설명 캐시</h2>
+            <p class="hint" style="margin:0 0 12px;">
+              같은 규칙·같은 사이트의 설명을 저장해 AI 호출을 줄입니다. 저장된 설명 캐시: <strong id="cache-count">-</strong>건
+            </p>
+            <button id="clear-cache-btn" type="button" class="btn btn--secondary btn--sm">캐시 전체 초기화</button>
+            <p id="cache-msg" class="hint" role="status"></p>
+          </div>
+        </section>
       </div>
-
-      <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;" />
-
-      <p class="hint" id="key-panel-desc" style="margin-top:0;"></p>
-
-      <label for="provider">공급자</label>
-      <select id="provider">
-        <option value="gemini">Gemini (Google)</option>
-        <option value="claude">Claude (Anthropic)</option>
-        <option value="openai">OpenAI (GPT)</option>
-      </select>
-
-      <label for="model">모델</label>
-      <select id="model"></select>
-
-      <label for="api-key" id="api-key-label">API 키</label>
-      <input id="api-key" type="password" placeholder="새 키를 입력할 때만 값을 채워주세요" autocomplete="off" />
-      <p id="key-status" class="hint"></p>
-
-      <button id="save-btn" type="button" class="btn btn--primary">저장</button>
-      <p id="save-msg" class="hint"></p>
-
-      <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;" />
-
-      <label>설명 캐시</label>
-      <p class="hint">저장된 설명 캐시: <strong id="cache-count">-</strong>건</p>
-      <button id="clear-cache-btn" type="button" class="btn btn--secondary">캐시 전체 초기화</button>
-      <p id="cache-msg" class="hint"></p>
-
-      <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;" />
-
-      <label>정기 모니터링</label>
-      <p class="hint" style="margin-top:0;">
-        등록한 URL을 선택한 주기마다 자동으로 검사하고, 결과를 저장소에 쌓아 위의 대시보드에 보여줍니다
-        (최대 <span id="monitor-max">5</span>개 등록 가능). 새로 등록한 URL은 다음 확인 시점(최대 10분 이내)에 처음 검사됩니다.
-      </p>
-      <p class="hint" id="storage-note" style="margin-top:0;"></p>
-
-      <label class="mode-option" style="margin-bottom:14px;">
-        <input type="checkbox" id="monitor-enabled-toggle" style="width:auto;margin-top:3px;" />
-        <div>
-          <strong>정기 모니터링 사용</strong>
-          <p class="hint" style="margin:2px 0 0;">꺼두면 등록된 URL이 있어도 자동 검사가 실행되지 않습니다 ("지금 검사" 수동 실행은 계속 가능).</p>
-        </div>
-      </label>
-
-      <div class="monitor-add-row">
-        <label for="monitor-cycle" style="margin:0;flex-shrink:0;align-self:center;font-weight:600;font-size:13px;">검사 주기</label>
-        <select id="monitor-cycle" style="max-width:180px;margin:0;">
-          <option value="daily">하루</option>
-          <option value="weekly">일주일</option>
-          <option value="biweekly">2주</option>
-          <option value="monthly">한 달(30일)</option>
-        </select>
-        <button id="monitor-settings-save-btn" type="button" class="btn btn--secondary" style="width:auto;">저장</button>
-      </div>
-      <p id="monitor-settings-msg" class="hint"></p>
-
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;" />
-
-      <div class="monitor-add-row">
-        <input id="monitor-url" type="url" placeholder="https://example.com" />
-        <button id="monitor-add-btn" type="button" class="btn btn--primary" style="width:auto;">등록</button>
-      </div>
-      <p id="monitor-msg" class="hint"></p>
-
-      <div id="monitor-list"></div>
-    </section>
+    </div>
   </main>
 
   <script src="admin.js"></script>

@@ -18,6 +18,9 @@ const finishBtn = document.getElementById('finish-btn');
 const downloadSectionEl = document.getElementById('download-section');
 const downloadTxtBtn = document.getElementById('download-txt-btn');
 const downloadHtmlBtn = document.getElementById('download-html-btn');
+const samplePreviewEl = document.getElementById('sample-preview');
+const howStepsEl = document.getElementById('how');
+const navMonitoringEl = document.getElementById('nav-monitoring');
 
 const SEVERITY_LABEL = { critical: '심각', serious: '높음', moderate: '보통', minor: '낮음' };
 
@@ -96,6 +99,7 @@ async function loadServerMode() {
     const data = await res.json();
     serverMode = data.mode;
 
+    form.classList.toggle('hero-form--visitor', serverMode === 'visitor');
     if (serverMode === 'visitor') {
       ownKeySectionEl.hidden = false;
       ownKeyDescEl.textContent = '이 서비스는 방문자가 직접 API 키를 입력해야 검사할 수 있습니다.';
@@ -141,6 +145,8 @@ async function handleSubmit(e) {
   downloadSectionEl.hidden = true;
   resultsEl.innerHTML = '';
   summaryEl.hidden = true;
+  samplePreviewEl.hidden = true;
+  howStepsEl.hidden = true;
   agentLogEl.hidden = false;
   agentLogListEl.innerHTML = '';
 
@@ -269,7 +275,7 @@ function handleEvent(event) {
     currentUsesOwnKey = !!event.usingOwnKey;
 
     if (event.findings && event.findings.length > 0) {
-      renderSummary(event.findings);
+      renderSummary(event.findings, { partial: true });
       renderResults(event.findings);
     }
 
@@ -294,7 +300,7 @@ function handleEvent(event) {
       setStatus('접근성 위반 항목을 발견하지 못했습니다.');
       return;
     }
-    renderSummary(event.findings);
+    renderSummary(event.findings, { score: event.score, grade: event.grade });
     renderResults(event.findings);
     setStatus(
       `검사 완료 · ${event.pageTitle || event.pageUrl} · 총 ${event.findings.length}건의 위반 항목` +
@@ -325,15 +331,55 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
-function renderSummary(findings) {
+// 준수 점수/등급 (서버 core/scoring.js와 같은 계산식 — 일시정지 중간 결과에도 표시하기 위해 화면에서도 계산)
+function computeClientScore(findings) {
+  const weights = { critical: 10, serious: 5, moderate: 2, minor: 1 };
+  const penalty = findings.reduce((sum, f) => sum + (weights[f.severity] || 1), 0);
+  const score = Math.max(0, 100 - penalty);
+  const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : 'D';
+  return { score, grade };
+}
+
+// 검사 결과 요약: 등급 원 + 심각도별 막대. opts: { score, grade, partial }
+function renderSummary(findings, opts = {}) {
   const counts = { critical: 0, serious: 0, moderate: 0, minor: 0 };
   findings.forEach((f) => {
     if (counts[f.severity] !== undefined) counts[f.severity] += 1;
   });
-  summaryEl.innerHTML = Object.entries(counts)
-    .filter(([, c]) => c > 0)
-    .map(([sev, c]) => `<span class="summary__chip summary__chip--${sev}">${SEVERITY_LABEL[sev]} ${c}</span>`)
+  const total = findings.length;
+  const verified = findings.filter((f) => f.verified).length;
+  const calc = computeClientScore(findings);
+  const score = typeof opts.score === 'number' ? opts.score : calc.score;
+  const grade = opts.grade || calc.grade;
+
+  const rows = ['critical', 'serious', 'moderate', 'minor']
+    .filter((sev) => counts[sev] > 0)
+    .map((sev) => {
+      const pct = Math.max(4, Math.round((counts[sev] / total) * 100));
+      return `<div class="bar-row">
+        <span class="bar-row__label">${SEVERITY_LABEL[sev]}</span>
+        <div class="bar"><div class="bar__fill bar__fill--${sev}" style="width:${pct}%"></div></div>
+        <span class="bar-row__count">${counts[sev]}</span>
+      </div>`;
+    })
     .join('');
+
+  summaryEl.innerHTML = `
+    <div class="overview">
+      <div class="overview__grade">
+        <div class="ring ring--${GRADE_CLASS[grade] || 'd'}" aria-hidden="true">${escapeHtml(grade)}</div>
+        <div class="overview__score">${score}점</div>
+      </div>
+      <div class="overview__bars">
+        <div class="overview__total">
+          <strong>총 ${total}건</strong>
+          <span>준수 등급 ${escapeHtml(grade)}</span>
+          ${verified ? `<span>검증됨 ${verified}건</span>` : ''}
+          ${opts.partial ? '<span class="overview__partial">중간 결과</span>' : ''}
+        </div>
+        ${rows}
+      </div>
+    </div>`;
   summaryEl.hidden = false;
 }
 
@@ -341,7 +387,7 @@ function renderResults(findings) {
   resultsEl.innerHTML = '';
   findings.forEach((f, index) => {
     const card = document.createElement('details');
-    card.className = 'card';
+    card.className = `card card--${f.severity || 'minor'}`;
     if (index === 0) card.open = true;
     const severity = f.severity || 'minor';
 
@@ -516,6 +562,7 @@ async function loadPublicDashboard() {
     renderPublicDashboard(await res.json());
   } catch (e) {
     sectionEl.hidden = true; // 불러오지 못하면 조용히 숨김 (검사 기능은 그대로 사용 가능)
+    navMonitoringEl.hidden = true;
   }
 }
 
@@ -566,6 +613,7 @@ function renderPublicDashboard(d) {
 
   if (!d.monitors || !d.monitors.length) {
     sectionEl.hidden = true; // 등록된 URL이 없으면 영역 자체를 숨김
+    navMonitoringEl.hidden = true;
     return;
   }
 
@@ -627,6 +675,7 @@ function renderPublicDashboard(d) {
   });
 
   sectionEl.hidden = false;
+  navMonitoringEl.hidden = false;
 }
 
 function escapeHtml(str) {

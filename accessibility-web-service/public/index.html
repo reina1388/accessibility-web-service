@@ -3,47 +3,66 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>웹 접근성 검증 AI Agent</title>
+  <title>웹 접근성 검증 AI Agent — URL 하나로 접근성 점검</title>
+  <meta name="description" content="URL을 입력하면 AI가 페이지를 직접 열어 웹 접근성을 검사하고, 문제 위치와 수정 방법을 알려줍니다." />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="hero">
-    <div class="hero__inner">
-      <span class="hero__mark">A11y Agent</span>
-      <h1>웹 접근성 검증 AI Agent</h1>
-      <p class="hero__sub">URL을 입력하면 AI 에이전트가 페이지를 직접 열어 접근성을 검사하고, 문제점과 수정 방법을 안내합니다.</p>
-      <a class="hero__download" href="/downloads/accessibility-agent-extension.zip" download>
-        🧩 크롬 확장 프로그램으로도 사용하기 (zip 다운로드)
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+  <!-- 아이콘: Feather Icons (MIT License) -->
+  <header class="topbar">
+    <div class="topbar__inner">
+      <a class="brand" href="/">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        A11y Agent
       </a>
+      <nav class="topbar__nav" aria-label="주요 메뉴">
+        <a href="#how">사용 방법</a>
+        <a href="#pub-dashboard" id="nav-monitoring" hidden>모니터링 현황</a>
+        <a class="keep" href="/downloads/accessibility-agent-extension.zip" download>확장 프로그램</a>
+      </nav>
     </div>
   </header>
 
-  <main class="container">
-    <form id="check-form" class="panel">
-      <label for="url">검사할 웹페이지 URL</label>
-      <input id="url" type="url" placeholder="https://example.com" required />
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero__inner">
+      <h1 id="hero-title">URL 하나로 웹 접근성을 점검하세요</h1>
+      <p class="hero__sub">AI가 페이지를 직접 열어 검사하고, 수정안이 통하는지까지 확인합니다.</p>
 
-      <section id="own-key-section" class="own-key-section" hidden>
-        <p class="hint" id="own-key-desc" style="margin-top:0;"></p>
+      <form id="check-form" class="hero-form">
+        <label for="url" class="sr-only">검사할 웹페이지 URL</label>
+        <input id="url" type="url" placeholder="https://example.com" required />
+        <button type="submit" id="submit-btn" class="btn btn--primary">검사하기</button>
 
-        <label for="own-provider">AI 공급자</label>
-        <select id="own-provider">
-          <option value="gemini">Gemini (Google)</option>
-          <option value="claude">Claude (Anthropic)</option>
-          <option value="openai">OpenAI (GPT)</option>
-        </select>
+        <section id="own-key-section" class="own-key-section" hidden>
+          <p class="hint" id="own-key-desc" style="margin-top:0;"></p>
 
-        <label for="own-model">모델</label>
-        <select id="own-model"></select>
+          <label for="own-provider">AI 공급자</label>
+          <select id="own-provider">
+            <option value="gemini">Gemini (Google)</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="openai">OpenAI (GPT)</option>
+          </select>
 
-        <label for="own-api-key">API 키</label>
-        <input id="own-api-key" type="password" placeholder="API 키 입력" autocomplete="off" />
-        <p class="hint">이 브라우저의 localStorage에만 저장되고, 검사 요청에만 함께 전달됩니다.</p>
-      </section>
+          <label for="own-model">모델</label>
+          <select id="own-model"></select>
 
-      <button type="submit" id="submit-btn" class="btn btn--primary">검사하기</button>
-    </form>
+          <label for="own-api-key">API 키</label>
+          <input id="own-api-key" type="password" placeholder="API 키 입력" autocomplete="off" />
+          <p class="hint">이 브라우저의 localStorage에만 저장되고, 검사 요청에만 함께 전달됩니다.</p>
+        </section>
+      </form>
 
+      <ul class="trust">
+        <li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>KWCAG 2.1 기준으로 설명</li>
+        <li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>가능한 항목은 수정안 자동 검증</li>
+        <li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>문제 위치 스크린샷 제공</li>
+      </ul>
+    </div>
+  </section>
+
+  <main id="main" class="container">
     <p id="status" class="status" role="status" aria-live="polite"></p>
 
     <details id="agent-log" class="agent-log" hidden>
@@ -59,15 +78,63 @@
       </div>
     </section>
 
-    <section id="summary" class="summary" hidden></section>
+    <section id="summary" class="summary" hidden aria-label="검사 결과 요약"></section>
 
     <section id="download-section" class="download-section" hidden>
-      <button id="download-txt-btn" type="button" class="btn btn--ghost">📄 텍스트로 다운로드 (.txt)</button>
-      <button id="download-html-btn" type="button" class="btn btn--ghost">🌐 문서로 다운로드 (.html)</button>
+      <button id="download-txt-btn" type="button" class="btn btn--ghost btn--sm">📄 텍스트로 다운로드 (.txt)</button>
+      <button id="download-html-btn" type="button" class="btn btn--ghost btn--sm">🌐 문서로 다운로드 (.html)</button>
       <p class="hint">스크린샷은 문서저장 시 제외됩니다.</p>
     </section>
 
-    <section id="results" class="results"></section>
+    <section id="results" class="results" aria-label="발견된 위반 항목"></section>
+
+    <ol id="how" class="steps" aria-label="사용 방법">
+      <li class="step">
+        <div class="step__head"><span class="step__num">1</span>페이지 열기
+          <svg class="ic step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </div>
+        <p>서버가 실제 브라우저로 URL을 열어 화면을 그대로 불러옵니다.</p>
+      </li>
+      <li class="step">
+        <div class="step__head"><span class="step__num">2</span>AI 검사·검증
+          <svg class="ic step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <p>위반 항목을 찾고, 가능한 수정안은 직접 적용해 통하는지 확인합니다.</p>
+      </li>
+      <li class="step">
+        <div class="step__head"><span class="step__num">3</span>수정법 리포트
+          <svg class="ic step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <p>문제 위치 스크린샷과 수정 방법을 항목별로 정리해 드립니다.</p>
+      </li>
+    </ol>
+
+    <section id="sample-preview" class="sample" aria-label="샘플 결과 미리보기">
+      <div class="sample__label">
+        <span>이런 결과를 받아요 · 예시 데이터입니다</span>
+        <span class="verified-badge">검증됨 2건</span>
+      </div>
+      <div class="overview" style="margin:0;box-shadow:none;border:none;padding:0;">
+        <div class="overview__grade">
+          <div class="ring ring--b" aria-hidden="true">B</div>
+          <div class="overview__score">82점</div>
+        </div>
+        <div class="overview__bars">
+          <div class="overview__total"><strong>총 6건</strong><span>심각도별 분포</span></div>
+          <div class="bar-row"><span class="bar-row__label">심각</span><div class="bar"><div class="bar__fill bar__fill--critical" style="width:17%"></div></div><span class="bar-row__count">1</span></div>
+          <div class="bar-row"><span class="bar-row__label">높음</span><div class="bar"><div class="bar__fill bar__fill--serious" style="width:50%"></div></div><span class="bar-row__count">3</span></div>
+          <div class="bar-row"><span class="bar-row__label">보통</span><div class="bar"><div class="bar__fill bar__fill--moderate" style="width:33%"></div></div><span class="bar-row__count">2</span></div>
+        </div>
+      </div>
+      <div class="sample__finding">
+        <span class="badge badge--serious">높음</span>
+        <span class="grow">이미지 대체 텍스트 누락</span>
+        <span class="meta">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          스크린샷 · 수정법 포함
+        </span>
+      </div>
+    </section>
 
     <section id="pub-dashboard" class="pub-dashboard" hidden>
       <h2 class="pub-dashboard__title">📊 정기 모니터링 현황</h2>
@@ -78,6 +145,7 @@
 
   <footer class="footer">
     <span id="cache-info"></span>
+    <p>자동 검사는 모든 접근성 문제를 찾아내지 못하며 수동 검토를 대신하지 않습니다. 결과는 참고용으로 활용해 주세요.</p>
   </footer>
 
   <script src="app.js"></script>
