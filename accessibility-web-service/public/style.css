@@ -456,3 +456,65 @@ input, select {
 .grade-pill--d { background: #b3261e; }
 
 .monitor-card__error { color: #b3261e; }
+
+/* ── 메인 화면: 정기 모니터링 현황 ── */
+.pub-dashboard { margin-top: 32px; }
+.pub-dashboard[hidden] { display: none; }
+
+.pub-dashboard__title { font-size: 17px; margin: 0 0 4px; }
+
+.pub-card {
+  background: #fff;
+  border: 1px solid #e2e5ea;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+
+.pub-card__header { margin-bottom: 8px; }
+
+.pub-card__url {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2233;
+  word-break: break-all;
+  text-decoration: none;
+}
+
+a.pub-card__url:hover { text-decoration: underline; color: #2455c9; }
+
+.pub-card__result {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pub-card__grade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 44px;
+}
+
+.pub-card__chips { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+
+.pub-card__note {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: #ad5700;
+}
+
+.pub-card__details { margin-top: 10px; font-size: 13px; }
+.pub-card__details summary { cursor: pointer; color: #2455c9; font-weight: 600; }
+.pub-card__details ul { margin: 8px 0 0; padding-left: 18px; }
+.pub-card__details li { margin: 4px 0; }
+
+.pub-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pub-card .hint { margin: 8px 0 0; }

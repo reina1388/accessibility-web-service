@@ -47,6 +47,7 @@ async function updateSettings({ enabled, cycle } = {}) {
     next.cycle = cycle;
   }
   await store.updateSettings(next);
+  invalidatePublicDashboard();
   return getSettings();
 }
 
@@ -57,11 +58,15 @@ async function addMonitor(url) {
     throw new Error(`등록 가능한 모니터링 URL은 최대 ${MAX_MONITORS}개입니다.`);
   }
   if (rows.some((r) => r.url === url)) throw new Error('이미 등록된 URL입니다.');
-  return store.insertMonitor(url);
+  const created = await store.insertMonitor(url);
+  invalidatePublicDashboard();
+  return created;
 }
 
-function removeMonitor(id) {
-  return store.deleteMonitor(id);
+async function removeMonitor(id) {
+  const removed = await store.deleteMonitor(id);
+  invalidatePublicDashboard();
+  return removed;
 }
 
 function getMonitor(id) {
@@ -93,16 +98,18 @@ function getHistory(id, limit = 100) {
   return store.getHistory(id, limit);
 }
 
-function recordCheck(id, entry) {
-  return store.insertHistory(id, entry);
+async function recordCheck(id, entry) {
+  await store.insertHistory(id, entry);
+  invalidatePublicDashboard();
 }
 
-function recordError(id, message) {
-  return store.setMonitorError(id, message);
+async function recordError(id, message) {
+  await store.setMonitorError(id, message);
+  invalidatePublicDashboard();
 }
 
 // ── 대시보드 집계 ────────────────────────────────────────────
-async function buildDashboard() {
+async function buildDashboard({ includeFindings = false } = {}) {
   const settings = await getSettings();
   const rows = await store.listMonitorRows();
 
@@ -186,9 +193,64 @@ async function buildDashboard() {
       bySeverity,
       avgScore: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null,
     },
-    monitors: monitors.map(({ latestFindings, ...rest }) => rest),
+    monitors: monitors.map(({ latestFindings, ...rest }) =>
+      includeFindings ? { ...rest, findings: latestFindings } : rest
+    ),
     topViolations,
   };
+}
+
+// ── 메인 화면(방문자)용 공개 대시보드 ─────────────────────────────
+// 관리자용 집계에서 "공개해도 안전한 정보만" 골라 담습니다.
+//   포함: 등록 URL, 최근 검사 결과(위반 건수/종류/등급/점수), 추이, 검사 주기, 다음 검사 예정
+//   제외: 내부 ID, 오류 원문(API 오류 등 내부 정보), 저장소 종류, 관리 설정
+// DB 부담을 줄이려고 결과를 짧게 캐시합니다 (관리자 조작/검사 결과 저장 시에는 즉시 갱신).
+const PUBLIC_CACHE_TTL_MS = 60 * 1000;
+let publicCache = { at: 0, data: null };
+
+function invalidatePublicDashboard() {
+  publicCache = { at: 0, data: null };
+}
+
+function toPublicDashboard(d) {
+  return {
+    generatedAt: new Date().toISOString(),
+    monitoringEnabled: d.settings.enabled,
+    cycleLabel: d.settings.cycleLabel,
+    totals: {
+      monitorCount: d.totals.monitorCount,
+      checkedCount: d.totals.checkedCount,
+      totalViolations: d.totals.totalViolations,
+      avgScore: d.totals.avgScore,
+    },
+    monitors: d.monitors.map((m) => ({
+      url: m.url,
+      lastCheckedAt: m.lastCheckedAt,
+      nextCheckAt: m.nextCheckAt,
+      // 검사 전 / 정상 / 최근 재검사 실패(원문은 숨기고 실패 여부만 표시)
+      status: m.latest ? (m.lastError ? 'recheck-failed' : 'ok') : m.lastError ? 'error' : 'pending',
+      latest: m.latest
+        ? {
+            checkedAt: m.latest.checkedAt,
+            total: m.latest.total,
+            bySeverity: m.latest.bySeverity,
+            score: m.latest.score,
+            grade: m.latest.grade,
+            pageTitle: m.latest.pageTitle,
+          }
+        : null,
+      trend: m.trend,
+      findings: (m.findings || []).map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity })),
+    })),
+  };
+}
+
+async function buildPublicDashboard() {
+  const now = Date.now();
+  if (publicCache.data && now - publicCache.at < PUBLIC_CACHE_TTL_MS) return publicCache.data;
+  const data = toPublicDashboard(await buildDashboard({ includeFindings: true }));
+  publicCache = { at: now, data };
+  return data;
 }
 
 module.exports = {
@@ -208,4 +270,6 @@ module.exports = {
   recordCheck,
   recordError,
   buildDashboard,
+  buildPublicDashboard,
+  invalidatePublicDashboard,
 };

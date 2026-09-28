@@ -27,6 +27,41 @@ function safeJsonParse(str) {
   }
 }
 
+// ── 일시 오류 재시도 (딱 1번) ────────────────────────────────
+// AI 서버가 잠깐 붐빌 때(500/502/503/504)나 네트워크가 순간 끊겼을 때만 몇 초 뒤 한 번 더 시도합니다.
+// 키 오류(401/403)·잘못된 요청(400)·사용량 초과(429) 같은 "다시 해도 안 되는" 오류는 재시도하지 않습니다.
+// (검사 한 번에 AI를 여러 번 부르기 때문에, 중간에 한 번 실패했다고 앞의 작업이 전부 버려지는 걸 줄여줍니다.)
+const RETRYABLE_STATUS = new Set([500, 502, 503, 504]);
+
+// 기본 4초 대기. (테스트용으로 AI_RETRY_DELAY_MS 환경변수로 바꿀 수 있습니다)
+function retryDelayMs() {
+  const raw = process.env.AI_RETRY_DELAY_MS;
+  const n = Number(raw);
+  return raw !== undefined && Number.isFinite(n) && n >= 0 ? n : 4000;
+}
+
+async function fetchWithOneRetry(url, options) {
+  const attempt = async () => {
+    try {
+      return await fetch(url, options);
+    } catch (networkError) {
+      return { networkError };
+    }
+  };
+
+  let res = await attempt();
+  const retryable = Boolean(res.networkError) || RETRYABLE_STATUS.has(res.status);
+  if (retryable) {
+    // 버리는 응답 본문을 정리해 연결이 남지 않게 합니다.
+    if (!res.networkError && typeof res.text === 'function') await res.text().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs()));
+    res = await attempt();
+  }
+
+  if (res.networkError) throw res.networkError;
+  return res;
+}
+
 const ClaudeAdapter = {
   buildTools() {
     return TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema }));
@@ -55,7 +90,7 @@ const ClaudeAdapter = {
     return messages;
   },
   async callModel(transcript, apiKey, model) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithOneRetry('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -124,7 +159,7 @@ const GeminiAdapter = {
     return contents;
   },
   async callModel(transcript, apiKey, model) {
-    const response = await fetch(
+    const response = await fetchWithOneRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: 'POST',
@@ -193,7 +228,7 @@ const OpenAIAdapter = {
     return messages;
   },
   async callModel(transcript, apiKey, model) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchWithOneRetry('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -227,4 +262,4 @@ const OpenAIAdapter = {
 
 const ADAPTERS = { claude: ClaudeAdapter, gemini: GeminiAdapter, openai: OpenAIAdapter };
 
-module.exports = { ADAPTERS, toGeminiSchema };
+module.exports = { ADAPTERS, toGeminiSchema, fetchWithOneRetry };

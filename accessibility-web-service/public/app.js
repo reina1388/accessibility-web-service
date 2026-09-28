@@ -84,6 +84,7 @@ let lastPausedData = null; // 일시정지 시점의 결과 (계속하지 않고
 initPage();
 
 async function initPage() {
+  loadPublicDashboard(); // 검사 기능과 별개로 불러옴 (실패해도 검사 기능에는 영향 없음)
   await loadServerMode();
   loadOwnKeySettings();
   refreshCacheInfo();
@@ -502,6 +503,130 @@ function buildHtmlReport(report) {
 
 function downloadHtmlReport(report) {
   triggerDownload(buildHtmlReport(report), 'text/html;charset=utf-8', `${reportFileBaseName(report)}.html`);
+}
+
+// ── 정기 모니터링 현황 (메인 화면 대시보드) ─────────────────────
+const GRADE_CLASS = { A: 'a', B: 'b', C: 'c', D: 'd' };
+
+async function loadPublicDashboard() {
+  const sectionEl = document.getElementById('pub-dashboard');
+  try {
+    const res = await fetch('/api/dashboard');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderPublicDashboard(await res.json());
+  } catch (e) {
+    sectionEl.hidden = true; // 불러오지 못하면 조용히 숨김 (검사 기능은 그대로 사용 가능)
+  }
+}
+
+function pubSeverityChips(bySeverity) {
+  const chips = ['critical', 'serious', 'moderate', 'minor']
+    .filter((sev) => bySeverity && bySeverity[sev] > 0)
+    .map((sev) => `<span class="monitor-badge monitor-badge--${sev}">${SEVERITY_LABEL[sev]} ${bySeverity[sev]}</span>`)
+    .join('');
+  return chips || '<span class="monitor-badge monitor-badge--none">위반 없음</span>';
+}
+
+// 최근 검사들의 위반 건수를 작은 막대 그래프로 (오래된 것 → 최신)
+function pubTrendBars(trend) {
+  if (!trend || trend.length < 2) return '';
+  const max = Math.max(...trend.map((t) => t.total), 1);
+  const barW = 8;
+  const gap = 3;
+  const h = 26;
+  const bars = trend
+    .map((t, i) => {
+      const bh = Math.max(2, Math.round((t.total / max) * (h - 2)));
+      const title = `${new Date(t.checkedAt).toLocaleDateString('ko-KR')} · 위반 ${t.total}건`;
+      return `<rect x="${i * (barW + gap)}" y="${h - bh}" width="${barW}" height="${bh}" rx="1.5" fill="#2455c9"><title>${escapeHtml(title)}</title></rect>`;
+    })
+    .join('');
+  const w = trend.length * (barW + gap) - gap;
+  return `<div class="pub-trend"><span class="hint">최근 ${trend.length}회 추이</span>
+    <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="최근 ${trend.length}회 위반 건수 추이">${bars}</svg></div>`;
+}
+
+function pubDate(iso) {
+  return iso ? new Date(iso).toLocaleString('ko-KR') : '-';
+}
+
+function safeHttpUrl(url) {
+  try {
+    const u = new URL(url);
+    return ['http:', 'https:'].includes(u.protocol) ? u.toString() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderPublicDashboard(d) {
+  const sectionEl = document.getElementById('pub-dashboard');
+  const subEl = document.getElementById('pub-dashboard-sub');
+  const listEl = document.getElementById('pub-dashboard-list');
+
+  if (!d.monitors || !d.monitors.length) {
+    sectionEl.hidden = true; // 등록된 URL이 없으면 영역 자체를 숨김
+    return;
+  }
+
+  const t = d.totals;
+  const parts = [`등록 ${t.monitorCount}개`, d.monitoringEnabled ? `${d.cycleLabel}마다 자동 검사` : '자동 검사 중지됨'];
+  if (t.avgScore !== null && t.avgScore !== undefined) parts.push(`평균 ${t.avgScore}점`);
+  parts.push(`현재 위반 ${t.totalViolations}건`);
+  subEl.textContent = parts.join(' · ');
+
+  listEl.innerHTML = '';
+  d.monitors.forEach((m) => {
+    const card = document.createElement('div');
+    card.className = 'pub-card';
+    const l = m.latest;
+    const href = safeHttpUrl(m.url);
+    const urlHtml = href
+      ? `<a class="pub-card__url" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(m.url)}</a>`
+      : `<span class="pub-card__url">${escapeHtml(m.url)}</span>`;
+
+    let body;
+    if (!l) {
+      body =
+        m.status === 'error'
+          ? '<p class="pub-card__note">최근 검사에 실패했습니다. 잠시 후 자동으로 다시 시도합니다.</p>'
+          : '<p class="pub-card__note">아직 검사 전입니다. 곧 첫 검사가 실행됩니다.</p>';
+    } else {
+      const grade = l.grade ? `<span class="grade-pill grade-pill--${GRADE_CLASS[l.grade] || 'd'}">${escapeHtml(l.grade)}</span>` : '';
+      const score = typeof l.score === 'number' ? `<span class="hint">${l.score}점</span>` : '';
+      const failedNote =
+        m.status === 'recheck-failed'
+          ? '<p class="pub-card__note">※ 최근 재검사에 실패해 이전 검사 결과를 보여주고 있습니다.</p>'
+          : '';
+      const findings = (m.findings || [])
+        .map(
+          (f) => `<li><span class="monitor-badge monitor-badge--${escapeHtml(f.severity)}">${escapeHtml(SEVERITY_LABEL[f.severity] || f.severity)}</span> ${escapeHtml(f.title)}</li>`
+        )
+        .join('');
+      const findingsHtml = findings
+        ? `<details class="pub-card__details"><summary>발견된 위반 유형 ${m.findings.length}가지 보기</summary><ul>${findings}</ul></details>`
+        : '';
+      body = `
+        <div class="pub-card__result">
+          <div class="pub-card__grade">${grade}${score}</div>
+          <div>
+            <strong>위반 ${l.total}건</strong>
+            <div class="pub-card__chips">${pubSeverityChips(l.bySeverity)}</div>
+          </div>
+        </div>
+        ${failedNote}
+        ${findingsHtml}
+        ${pubTrendBars(m.trend)}
+        <p class="hint">마지막 검사: ${escapeHtml(pubDate(l.checkedAt))}${
+          d.monitoringEnabled && m.nextCheckAt ? ` · 다음 검사 예정: ${escapeHtml(pubDate(m.nextCheckAt))}` : ''
+        }</p>`;
+    }
+
+    card.innerHTML = `<div class="pub-card__header">${urlHtml}</div>${body}`;
+    listEl.appendChild(card);
+  });
+
+  sectionEl.hidden = false;
 }
 
 function escapeHtml(str) {

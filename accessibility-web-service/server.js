@@ -444,6 +444,15 @@ app.post(
   })
 );
 
+// ── 방문자용: 정기 모니터링 현황 (읽기 전용, 로그인 불필요) ─────────
+// 관리자가 등록한 URL과 최근 검사 결과 중 "공개해도 안전한 정보"만 내려줍니다 (core/monitors.js 참고).
+app.get(
+  '/api/dashboard',
+  asyncRoute(async (req, res) => {
+    res.json(await monitorsStore.buildPublicDashboard());
+  })
+);
+
 scheduler.startScheduler();
 
 const PORT = process.env.PORT || 3000;
