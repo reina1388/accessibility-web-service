@@ -122,6 +122,7 @@ async function buildDashboard({ includeFindings = false } = {}) {
         url: m.url,
         lastCheckedAt: m.lastCheckedAt,
         lastError: m.lastError,
+        lastErrorAt: m.lastErrorAt,
         nextCheckAt: nextCheckAt(m, settings.cycle),
         historyCount: summary.count,
         latest: latest
@@ -138,7 +139,7 @@ async function buildDashboard({ includeFindings = false } = {}) {
         trend: recent
           .slice()
           .reverse()
-          .map((h) => ({ checkedAt: h.checkedAt, total: h.total })),
+          .map((h) => ({ checkedAt: h.checkedAt, total: h.total, triggeredBy: h.triggeredBy, grade: h.grade })),
         latestFindings: latest ? latest.findings : [],
       };
     })
@@ -183,6 +184,51 @@ async function buildDashboard({ includeFindings = false } = {}) {
     .slice(0, 5)
     .map(({ ruleId, title, severity, monitorCount }) => ({ ruleId, title, severity, monitorCount }));
 
+  // 전체 URL의 위반 건수 추이를 하나로 합칩니다.
+  // 각 URL의 검사 시각이 서로 다르므로, "몇 번째로 최근 검사인지"(순번) 기준으로 맞춰
+  // 대략적인 전체 흐름만 보여줍니다 (정밀한 날짜 정렬이 아닙니다).
+  const maxTrendLen = Math.max(0, ...monitors.map((m) => m.trend.length));
+  const overallTrend = [];
+  for (let i = 0; i < maxTrendLen; i++) {
+    let sum = 0;
+    let any = false;
+    monitors.forEach((m) => {
+      const point = m.trend[m.trend.length - maxTrendLen + i];
+      if (point) {
+        sum += point.total;
+        any = true;
+      }
+    });
+    if (any) overallTrend.push({ total: sum });
+  }
+
+  // 최근 활동: 성공한 검사 이력과, 현재 미해결 상태인 오류를 시각순으로 합칩니다.
+  // (오류는 가장 최근 1건만 저장되므로, 해결되기 전까지만 목록에 남습니다.)
+  const activity = [];
+  monitors.forEach((m) => {
+    if (m.latest) {
+      activity.push({
+        url: m.url,
+        checkedAt: m.latest.checkedAt,
+        type: 'success',
+        total: m.latest.total,
+        grade: m.latest.grade,
+      });
+    }
+    if (m.lastError) {
+      activity.push({
+        url: m.url,
+        checkedAt: m.lastErrorAt || m.latest?.checkedAt || null,
+        type: 'error',
+        message: m.lastError,
+      });
+    }
+  });
+  const recentActivity = activity
+    .filter((a) => a.checkedAt)
+    .sort((a, b) => Date.parse(b.checkedAt) - Date.parse(a.checkedAt))
+    .slice(0, 8);
+
   return {
     storage: store.name,
     settings,
@@ -197,6 +243,8 @@ async function buildDashboard({ includeFindings = false } = {}) {
       includeFindings ? { ...rest, findings: latestFindings } : rest
     ),
     topViolations,
+    overallTrend,
+    recentActivity,
   };
 }
 
@@ -239,7 +287,7 @@ function toPublicDashboard(d) {
             pageTitle: m.latest.pageTitle,
           }
         : null,
-      trend: m.trend,
+      trend: (m.trend || []).map((t) => ({ checkedAt: t.checkedAt, total: t.total })),
       findings: (m.findings || []).map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity })),
     })),
   };
