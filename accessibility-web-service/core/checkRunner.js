@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const { chromium } = require('playwright');
 const { runAgentLoop, DEFAULT_TOKEN_LIMIT } = require('./agentLoop');
 const { computeScoreAndGrade } = require('./scoring');
@@ -35,17 +34,4 @@ async function runFullCheckAutomated({ provider, apiKey, model, url }) {
   }
 }
 
-// AI를 부르지 않고, 페이지 내용이 이전과 달라졌는지만 가볍게 확인하기 위한 해시값을 구합니다.
-async function fetchContentHash(url) {
-  const browser = await chromium.launch();
-  try {
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    const content = await page.content();
-    return crypto.createHash('sha256').update(content).digest('hex');
-  } finally {
-    await browser.close();
-  }
-}
-
-module.exports = { runFullCheckAutomated, fetchContentHash };
+module.exports = { runFullCheckAutomated };

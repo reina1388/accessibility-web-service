@@ -324,76 +324,125 @@ app.post('/api/admin/config', adminAuth.requireAdmin, (req, res) => {
 });
 
 // ── 관리자 전용: 정기 모니터링 ──────────────────────────────────
-// 등록해둔 URL을 스케줄러가 주기적으로(하루 1회 또는 콘텐츠 변경 감지 시) 자동 검사합니다.
-app.get('/api/admin/monitors', adminAuth.requireAdmin, (req, res) => {
-  res.json({
-    monitors: monitorsStore.listMonitors(),
-    max: monitorsStore.MAX_MONITORS,
-    settings: monitorsStore.getSettings(),
+// 등록해둔 URL을 스케줄러가 선택한 주기(하루/일주일/2주/한 달)마다 자동 검사하고,
+// 결과를 저장소(Supabase DB 또는 메모리)에 쌓아 대시보드에 보여줍니다.
+
+// async 라우트에서 발생한 예외가 서버를 죽이지 않도록 감싸줍니다 (Express 4는 async 오류를 자동 처리하지 않음).
+const asyncRoute = (fn) => (req, res) => {
+  Promise.resolve(fn(req, res)).catch((err) => {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   });
-});
+};
 
-app.post('/api/admin/monitors/settings', adminAuth.requireAdmin, (req, res) => {
-  try {
-    const settings = monitorsStore.updateSettings(req.body || {});
-    res.json({ settings });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
+app.get(
+  '/api/admin/monitors',
+  adminAuth.requireAdmin,
+  asyncRoute(async (req, res) => {
+    const [monitors, settings] = await Promise.all([monitorsStore.listMonitors(), monitorsStore.getSettings()]);
+    res.json({
+      monitors,
+      max: monitorsStore.MAX_MONITORS,
+      settings,
+      cycles: monitorsStore.cycleList(),
+      storage: monitorsStore.storageName(),
+    });
+  })
+);
 
-app.post('/api/admin/monitors', adminAuth.requireAdmin, (req, res) => {
-  const { url } = req.body || {};
-  if (!url) {
-    res.status(400).json({ error: 'url이 필요합니다.' });
-    return;
-  }
-  try {
-    new URL(url);
-  } catch (e) {
-    res.status(400).json({ error: '올바른 URL 형식이 아닙니다.' });
-    return;
-  }
-  try {
-    const monitor = monitorsStore.addMonitor(url);
-    res.json({ monitor: { id: monitor.id, url: monitor.url, enabled: monitor.enabled, createdAt: monitor.createdAt } });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
+app.get(
+  '/api/admin/dashboard',
+  adminAuth.requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.json(await monitorsStore.buildDashboard());
+  })
+);
 
-app.delete('/api/admin/monitors/:id', adminAuth.requireAdmin, (req, res) => {
-  const removed = monitorsStore.removeMonitor(req.params.id);
-  res.json({ removed });
-});
+app.post(
+  '/api/admin/monitors/settings',
+  adminAuth.requireAdmin,
+  asyncRoute(async (req, res) => {
+    const { enabled, cycle } = req.body || {};
+    try {
+      const settings = await monitorsStore.updateSettings({ enabled, cycle });
+      res.json({ settings });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  })
+);
 
-app.get('/api/admin/monitors/:id/history', adminAuth.requireAdmin, (req, res) => {
-  const monitor = monitorsStore.getMonitor(req.params.id);
-  if (!monitor) {
-    res.status(404).json({ error: '해당 모니터를 찾을 수 없습니다.' });
-    return;
-  }
-  res.json({ url: monitor.url, history: monitor.history });
-});
+app.post(
+  '/api/admin/monitors',
+  adminAuth.requireAdmin,
+  asyncRoute(async (req, res) => {
+    const { url } = req.body || {};
+    if (!url) {
+      res.status(400).json({ error: 'url이 필요합니다.' });
+      return;
+    }
+    let parsed;
+    try {
+      parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('protocol');
+    } catch (e) {
+      res.status(400).json({ error: '올바른 URL 형식이 아닙니다 (http:// 또는 https://로 시작).' });
+      return;
+    }
+    try {
+      const monitor = await monitorsStore.addMonitor(parsed.toString());
+      res.json({ monitor: { id: monitor.id, url: monitor.url, enabled: monitor.enabled, createdAt: monitor.createdAt } });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  })
+);
 
-app.post('/api/admin/monitors/:id/check-now', adminAuth.requireAdmin, async (req, res) => {
-  const monitor = monitorsStore.getMonitor(req.params.id);
-  if (!monitor) {
-    res.status(404).json({ error: '해당 모니터를 찾을 수 없습니다.' });
-    return;
-  }
-  const cfg = serverConfig.getRuntimeConfig();
-  if (!cfg.apiKey) {
-    res.status(400).json({ error: '관리자가 아직 API 키를 설정하지 않았습니다.' });
-    return;
-  }
-  try {
-    const entry = await scheduler.checkOneMonitor(monitor, cfg, { force: true });
-    res.json({ entry });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+app.delete(
+  '/api/admin/monitors/:id',
+  adminAuth.requireAdmin,
+  asyncRoute(async (req, res) => {
+    const removed = await monitorsStore.removeMonitor(req.params.id);
+    res.json({ removed });
+  })
+);
+
+app.get(
+  '/api/admin/monitors/:id/history',
+  adminAuth.requireAdmin,
+  asyncRoute(async (req, res) => {
+    const monitor = await monitorsStore.getMonitor(req.params.id);
+    if (!monitor) {
+      res.status(404).json({ error: '해당 모니터를 찾을 수 없습니다.' });
+      return;
+    }
+    const history = await monitorsStore.getHistory(monitor.id, 100);
+    res.json({ url: monitor.url, history });
+  })
+);
+
+app.post(
+  '/api/admin/monitors/:id/check-now',
+  adminAuth.requireAdmin,
+  asyncRoute(async (req, res) => {
+    const monitor = await monitorsStore.getMonitor(req.params.id);
+    if (!monitor) {
+      res.status(404).json({ error: '해당 모니터를 찾을 수 없습니다.' });
+      return;
+    }
+    const cfg = serverConfig.getRuntimeConfig();
+    if (!cfg.apiKey) {
+      res.status(400).json({ error: '관리자가 아직 API 키를 설정하지 않았습니다.' });
+      return;
+    }
+    try {
+      const entry = await scheduler.runCheck(monitor, cfg, 'manual');
+      res.json({ entry });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  })
+);
 
 scheduler.startScheduler();
 

@@ -24,6 +24,17 @@
       <p id="login-msg" class="hint"></p>
     </section>
 
+    <section id="dashboard-panel" class="panel" hidden>
+      <div class="dash-header">
+        <strong>📊 접근성 모니터링 대시보드</strong>
+        <button id="dash-refresh-btn" type="button" class="btn btn--ghost" style="width:auto;padding:6px 12px;font-size:12px;">새로고침</button>
+      </div>
+      <p id="dash-msg" class="hint"></p>
+      <div id="dash-summary" class="dash-summary"></div>
+      <div id="dash-table"></div>
+      <div id="dash-top"></div>
+    </section>
+
     <section id="config-panel" class="panel" hidden>
       <label>운영 모드</label>
       <div class="mode-options">
@@ -70,6 +81,45 @@
       <p class="hint">저장된 설명 캐시: <strong id="cache-count">-</strong>건</p>
       <button id="clear-cache-btn" type="button" class="btn btn--secondary">캐시 전체 초기화</button>
       <p id="cache-msg" class="hint"></p>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;" />
+
+      <label>정기 모니터링</label>
+      <p class="hint" style="margin-top:0;">
+        등록한 URL을 선택한 주기마다 자동으로 검사하고, 결과를 저장소에 쌓아 위의 대시보드에 보여줍니다
+        (최대 <span id="monitor-max">5</span>개 등록 가능). 새로 등록한 URL은 다음 확인 시점(최대 10분 이내)에 처음 검사됩니다.
+      </p>
+      <p class="hint" id="storage-note" style="margin-top:0;"></p>
+
+      <label class="mode-option" style="margin-bottom:14px;">
+        <input type="checkbox" id="monitor-enabled-toggle" style="width:auto;margin-top:3px;" />
+        <div>
+          <strong>정기 모니터링 사용</strong>
+          <p class="hint" style="margin:2px 0 0;">꺼두면 등록된 URL이 있어도 자동 검사가 실행되지 않습니다 ("지금 검사" 수동 실행은 계속 가능).</p>
+        </div>
+      </label>
+
+      <div class="monitor-add-row">
+        <label for="monitor-cycle" style="margin:0;flex-shrink:0;align-self:center;font-weight:600;font-size:13px;">검사 주기</label>
+        <select id="monitor-cycle" style="max-width:180px;margin:0;">
+          <option value="daily">하루</option>
+          <option value="weekly">일주일</option>
+          <option value="biweekly">2주</option>
+          <option value="monthly">한 달(30일)</option>
+        </select>
+        <button id="monitor-settings-save-btn" type="button" class="btn btn--secondary" style="width:auto;">저장</button>
+      </div>
+      <p id="monitor-settings-msg" class="hint"></p>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;" />
+
+      <div class="monitor-add-row">
+        <input id="monitor-url" type="url" placeholder="https://example.com" />
+        <button id="monitor-add-btn" type="button" class="btn btn--primary" style="width:auto;">등록</button>
+      </div>
+      <p id="monitor-msg" class="hint"></p>
+
+      <div id="monitor-list"></div>
     </section>
   </main>
 

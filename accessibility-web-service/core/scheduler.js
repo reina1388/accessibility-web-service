@@ -1,14 +1,17 @@
 const monitorsStore = require('./monitors');
 const serverConfig = require('./serverConfig');
-const { runFullCheckAutomated, fetchContentHash } = require('./checkRunner');
+const { runFullCheckAutomated } = require('./checkRunner');
 
-// 실제 점검 주기는 관리자가 monitorsStore 설정(pollIntervalMinutes)으로 조정합니다.
-// 이 값을 그때그때 반영하기 위해, 짧은 주기(1분)로 깨어나서 "이번엔 실제로 점검할 때가 됐는지"만 확인합니다.
-// (이렇게 하면 관리자가 주기를 바꿔도 타이머를 재시작할 필요 없이 바로 반영됩니다.)
-const HEARTBEAT_MS = 60 * 1000;
+// 선택한 주기(하루/일주일/2주/한 달)는 최소 하루 단위라서, 자주 깨어날 필요가 없습니다.
+// 10분마다 "검사할 때가 된 URL이 있는지"만 가볍게 확인합니다.
+const HEARTBEAT_MS = 10 * 60 * 1000;
+
+// 검사가 실패한 URL은 다음 주기(최대 한 달)까지 기다리지 않고, 이 간격 뒤에 다시 시도합니다.
+const RETRY_AFTER_ERROR_MS = 60 * 60 * 1000;
 
 let schedulerStarted = false;
-let lastPollAt = 0;
+let running = false; // 이전 점검이 아직 끝나지 않았으면 겹쳐 실행하지 않음
+const lastAttempt = new Map(); // monitorId -> 마지막 시도 시각(메모리, 재시작 시 초기화)
 
 function startScheduler() {
   if (schedulerStarted) return; // 중복 시작 방지
@@ -16,86 +19,81 @@ function startScheduler() {
   setInterval(() => {
     heartbeat().catch((err) => console.error('스케줄러 오류:', err.message));
   }, HEARTBEAT_MS);
-  console.log('모니터링 스케줄러 시작됨 (1분마다 실행 여부 확인)');
+  console.log(`모니터링 스케줄러 시작됨 (저장소: ${monitorsStore.storageName()}, ${HEARTBEAT_MS / 60000}분마다 확인)`);
 }
 
-async function heartbeat() {
-  const settings = monitorsStore.getSettings();
-  if (!settings.enabled) return; // 관리자가 꺼둔 경우 아무것도 하지 않음
+async function heartbeat(now = Date.now()) {
+  if (running) return [];
+  running = true;
+  const executed = [];
+  try {
+    const settings = await monitorsStore.getSettings();
+    if (!settings.enabled) return executed; // 관리자가 꺼둔 경우
 
-  const intervalMs = settings.pollIntervalMinutes * 60 * 1000;
-  const now = Date.now();
-  if (now - lastPollAt < intervalMs) return; // 아직 설정된 주기가 안 지남
-  lastPollAt = now;
+    const cfg = serverConfig.getRuntimeConfig();
+    if (!cfg.apiKey) return executed; // 관리자 키가 없으면 자동 검사를 실행할 수 없음
 
-  await tick();
-}
+    const cycleMs = monitorsStore.CYCLES[settings.cycle].ms;
+    const monitors = await monitorsStore.listMonitorRows();
 
-async function tick() {
-  const cfg = serverConfig.getRuntimeConfig();
-  if (!cfg.apiKey) return; // 관리자 키가 없으면 자동 검사를 실행할 수 없음
+    for (const monitor of monitors) {
+      if (!monitor.enabled) continue;
 
-  for (const monitor of monitorsStore.monitors.values()) {
-    if (!monitor.enabled) continue;
-    try {
-      await checkOneMonitor(monitor, cfg, {});
-    } catch (err) {
-      monitorsStore.recordCheck(monitor.id, {
-        checkedAt: new Date().toISOString(),
-        triggeredBy: 'schedule',
-        error: err.message,
-      });
+      const due = !monitor.lastCheckedAt || now - Date.parse(monitor.lastCheckedAt) >= cycleMs;
+      if (!due) continue;
+
+      // 방금 실패했다면 잠시 쉬었다가 재시도
+      const attempted = lastAttempt.get(monitor.id) || 0;
+      if (now - attempted < RETRY_AFTER_ERROR_MS) continue;
+      lastAttempt.set(monitor.id, now);
+
+      try {
+        await runCheck(monitor, cfg, 'schedule');
+        executed.push(monitor.id);
+      } catch (err) {
+        console.error(`모니터링 검사 실패 (${monitor.url}):`, err.message);
+      }
     }
+  } finally {
+    running = false;
+  }
+  return executed;
+}
+
+// 정식 검사를 실행하고 결과를 저장합니다. 실패하면 오류 상태를 저장하고 예외를 다시 던집니다.
+// triggeredBy: 'schedule'(자동) | 'manual'(관리자가 "지금 검사" 클릭)
+async function runCheck(monitor, cfg, triggeredBy) {
+  try {
+    const result = await runFullCheckAutomated({
+      provider: cfg.provider,
+      apiKey: cfg.apiKey,
+      model: cfg.model,
+      url: monitor.url,
+    });
+
+    const bySeverity = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+    result.findings.forEach((f) => {
+      if (bySeverity[f.severity] !== undefined) bySeverity[f.severity] += 1;
+    });
+
+    const entry = {
+      checkedAt: new Date().toISOString(),
+      triggeredBy,
+      pageTitle: result.pageTitle,
+      total: result.findings.length,
+      bySeverity,
+      score: result.score,
+      grade: result.grade,
+      // 상세 설명/스크린샷은 제외하고, 목록·대시보드 표시에 필요한 정보만 저장합니다.
+      findings: result.findings.map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity })),
+    };
+
+    await monitorsStore.recordCheck(monitor.id, entry);
+    return entry;
+  } catch (err) {
+    await monitorsStore.recordError(monitor.id, err.message).catch(() => {});
+    throw err;
   }
 }
 
-// force가 true면 변경 여부/주기와 상관없이 즉시 정식 검사를 실행합니다 (관리자의 "지금 검사" 버튼용).
-async function checkOneMonitor(monitor, cfg, { force = false } = {}) {
-  const now = Date.now();
-  const lastChecked = monitor.lastCheckedAt ? new Date(monitor.lastCheckedAt).getTime() : 0;
-  const dueForDaily = now - lastChecked >= monitorsStore.DAILY_INTERVAL_MS;
-
-  let shouldRunFull = force || dueForDaily;
-  let triggeredBy = force ? 'manual' : dueForDaily ? 'schedule' : null;
-
-  if (!shouldRunFull) {
-    // AI 호출 없이 페이지 내용만 가볍게 확인해 변경 여부 판단
-    const hash = await fetchContentHash(monitor.url);
-    if (monitor.lastContentHash && hash !== monitor.lastContentHash) {
-      shouldRunFull = true;
-      triggeredBy = 'change';
-    }
-    monitorsStore.setContentHash(monitor.id, hash);
-  }
-
-  if (!shouldRunFull) return null;
-
-  const result = await runFullCheckAutomated({
-    provider: cfg.provider,
-    apiKey: cfg.apiKey,
-    model: cfg.model,
-    url: monitor.url,
-  });
-
-  const bySeverity = { critical: 0, serious: 0, moderate: 0, minor: 0 };
-  result.findings.forEach((f) => {
-    if (bySeverity[f.severity] !== undefined) bySeverity[f.severity] += 1;
-  });
-
-  const entry = {
-    checkedAt: new Date().toISOString(),
-    triggeredBy,
-    pageTitle: result.pageTitle,
-    total: result.findings.length,
-    bySeverity,
-    score: result.score,
-    grade: result.grade,
-    // 상세 설명/스크린샷은 메모리 절약을 위해 제외하고, 목록 표시에 필요한 정보만 저장합니다.
-    findings: result.findings.map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity })),
-  };
-
-  monitorsStore.recordCheck(monitor.id, entry);
-  return entry;
-}
-
-module.exports = { startScheduler, checkOneMonitor, tick, heartbeat };
+module.exports = { startScheduler, heartbeat, runCheck };
