@@ -166,6 +166,8 @@ input::placeholder { color: #737b88; }
   color: var(--text-muted); text-decoration: none; background: none; border: none; cursor: pointer;
 }
 .topbar__nav a:hover, .topbar__nav button:hover { background: #eef0f3; color: var(--text); }
+.admin-link { display: inline-flex; align-items: center; gap: 5px; }
+.admin-link .ic { width: 15px; height: 15px; }
 
 .hero { background: var(--accent-tint); border-bottom: 1px solid #dbe3f6; padding: 48px 20px 40px; text-align: center; }
 .hero__inner { max-width: 720px; margin: 0 auto; }
