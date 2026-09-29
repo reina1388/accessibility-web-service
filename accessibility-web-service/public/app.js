@@ -606,6 +606,62 @@ function safeHttpUrl(url) {
   }
 }
 
+// 예시 데이터(#sample-preview)를 실제 모니터링 결과로 교체합니다.
+// (검사 완료된 실제 데이터가 있으면 "예시"를 보여줄 필요가 없고, 아래 목록과도 내용이 겹치므로
+//  가장 위반이 많은(=가장 눈에 띄는) 사이트 하나를 골라 이 자리에 실제 데이터로 채웁니다.)
+function featureRealResult(monitor) {
+  const sampleEl = document.getElementById('sample-preview');
+  const l = monitor.latest;
+  const href = safeHttpUrl(monitor.url);
+  const hostname = (() => {
+    try {
+      return new URL(monitor.url).hostname;
+    } catch (e) {
+      return monitor.url;
+    }
+  })();
+  const urlHtml = href
+    ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(hostname)}</a>`
+    : escapeHtml(hostname);
+
+  const bars = ['critical', 'serious', 'moderate', 'minor']
+    .filter((sev) => l.bySeverity && l.bySeverity[sev] > 0)
+    .map((sev) => {
+      const count = l.bySeverity[sev];
+      const pct = Math.round((count / l.total) * 100);
+      return `<div class="bar-row"><span class="bar-row__label">${SEVERITY_LABEL[sev]}</span><div class="bar"><div class="bar__fill bar__fill--${sev}" style="width:${pct}%"></div></div><span class="bar-row__count">${count}</span></div>`;
+    })
+    .join('');
+
+  const topFinding = (monitor.findings || [])[0];
+  const findingHtml = topFinding
+    ? `<div class="sample__finding">
+        <span class="badge badge--${escapeHtml(topFinding.severity)}">${escapeHtml(SEVERITY_LABEL[topFinding.severity] || topFinding.severity)}</span>
+        <span class="grow">${escapeHtml(topFinding.title)}</span>
+        <span class="meta">마지막 검사: ${escapeHtml(pubDate(l.checkedAt))}</span>
+      </div>`
+    : '';
+
+  sampleEl.setAttribute('aria-label', '정기 모니터링 실제 결과');
+  sampleEl.innerHTML = `
+    <div class="sample__label">
+      <span>📊 정기 모니터링 결과 · ${urlHtml}</span>
+      <span class="live-badge">실시간 데이터</span>
+    </div>
+    <div class="overview" style="margin:0;box-shadow:none;border:none;padding:0;">
+      <div class="overview__grade">
+        <div class="ring ring--${GRADE_CLASS[l.grade] || 'd'}" aria-hidden="true">${escapeHtml(l.grade || '-')}</div>
+        ${typeof l.score === 'number' ? `<div class="overview__score">${l.score}점</div>` : ''}
+      </div>
+      <div class="overview__bars">
+        <div class="overview__total"><strong>총 ${l.total}건</strong><span>심각도별 분포</span></div>
+        ${bars || '<p class="hint" style="margin:4px 0 0;">위반 항목이 없어요.</p>'}
+      </div>
+    </div>
+    ${findingHtml}
+  `;
+}
+
 function renderPublicDashboard(d) {
   const sectionEl = document.getElementById('pub-dashboard');
   const subEl = document.getElementById('pub-dashboard-sub');
@@ -623,8 +679,21 @@ function renderPublicDashboard(d) {
   parts.push(`현재 위반 ${t.totalViolations}건`);
   subEl.textContent = parts.join(' · ');
 
+  // 검사 완료된 실제 데이터가 있으면, 위반이 가장 많은 사이트로 예시 영역을 대체하고
+  // 그 사이트는 아래 목록에서 제외해 같은 내용이 두 번 보이지 않게 합니다.
+  const withResults = d.monitors.filter((m) => m.latest);
+  let featured = null;
+  if (withResults.length) {
+    featured = withResults.slice().sort((a, b) => b.latest.total - a.latest.total)[0];
+    featureRealResult(featured);
+  }
+  const listMonitors = featured ? d.monitors.filter((m) => m !== featured) : d.monitors;
+
   listEl.innerHTML = '';
-  d.monitors.forEach((m) => {
+  if (featured && !listMonitors.length) {
+    listEl.innerHTML = '<p class="hint">등록된 사이트가 위에 모두 표시되고 있습니다.</p>';
+  }
+  listMonitors.forEach((m) => {
     const card = document.createElement('div');
     card.className = 'pub-card';
     const l = m.latest;
