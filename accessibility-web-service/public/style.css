@@ -217,9 +217,12 @@ input::placeholder { color: #737b88; }
 
 .sample { background: #fff; border: 1px dashed #b9c4dd; border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 8px; }
 .sample__label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-size: 12.5px; color: var(--text-muted); }
-.sample__finding { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 14px; }
-.sample__finding .grow { flex: 1; }
-.sample__finding .meta { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+.sample__finding { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 14px; }
+.sample__finding-head { display: flex; align-items: center; gap: 10px; }
+.sample__finding-head .grow { flex: 1; }
+.sample__finding-head .meta { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+.sample__fix { margin: 8px 0 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.sample__fix strong { color: var(--text); }
 
 /* ── 5. 검사 결과 ───────────────────────────────────────── */
 .overview { display: flex; align-items: center; gap: 24px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px; margin-top: 18px; box-shadow: var(--shadow); }
@@ -278,7 +281,9 @@ a.pub-card__url:hover { text-decoration: underline; color: var(--accent); }
 .pub-card__details { margin-top: 10px; font-size: 13px; }
 .pub-card__details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .pub-card__details ul { margin: 8px 0 0; padding-left: 18px; }
-.pub-card__details li { margin: 4px 0; }
+.pub-card__details li { margin: 4px 0 10px; }
+.pub-card__fix { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.pub-card__fix strong { color: var(--text); }
 .pub-trend { display: flex; align-items: flex-end; gap: 8px; margin-top: 10px; }
 .pub-card .hint { margin: 8px 0 0; }
 
@@ -367,6 +372,9 @@ a.pub-card__url:hover { text-decoration: underline; color: var(--accent); }
 .monitor-card__actions { display: flex; gap: 6px; flex-shrink: 0; }
 .monitor-history { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
 .monitor-history-row { display: flex; gap: 10px; font-size: 12px; color: var(--text-muted); padding: 4px 0; align-items: baseline; }
+.history-finding { font-size: 12px; color: var(--text-muted); padding: 4px 0 4px 18px; }
+.history-finding strong { color: var(--text, #1a2233); font-weight: 600; margin-left: 4px; }
+.history-finding__fix { margin: 3px 0 0; line-height: 1.5; }
 .trigger-tag { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--accent-tint); color: var(--accent); }
 
 /* ── 반응형 ─────────────────────────────────────────────── */

@@ -636,9 +636,12 @@ function featureRealResult(monitor) {
   const topFinding = (monitor.findings || [])[0];
   const findingHtml = topFinding
     ? `<div class="sample__finding">
-        <span class="badge badge--${escapeHtml(topFinding.severity)}">${escapeHtml(SEVERITY_LABEL[topFinding.severity] || topFinding.severity)}</span>
-        <span class="grow">${escapeHtml(topFinding.title)}</span>
-        <span class="meta">마지막 검사: ${escapeHtml(pubDate(l.checkedAt))}</span>
+        <div class="sample__finding-head">
+          <span class="badge badge--${escapeHtml(topFinding.severity)}">${escapeHtml(SEVERITY_LABEL[topFinding.severity] || topFinding.severity)}</span>
+          <span class="grow">${escapeHtml(topFinding.title)}</span>
+          <span class="meta">마지막 검사: ${escapeHtml(pubDate(l.checkedAt))}</span>
+        </div>
+        ${topFinding.howToFix ? `<p class="sample__fix"><strong>수정 방법:</strong> ${escapeHtml(topFinding.howToFix)}</p>` : ''}
       </div>`
     : '';
 
@@ -717,7 +720,10 @@ function renderPublicDashboard(d) {
           : '';
       const findings = (m.findings || [])
         .map(
-          (f) => `<li><span class="monitor-badge monitor-badge--${escapeHtml(f.severity)}">${escapeHtml(SEVERITY_LABEL[f.severity] || f.severity)}</span> ${escapeHtml(f.title)}</li>`
+          (f) => `<li>
+            <span class="monitor-badge monitor-badge--${escapeHtml(f.severity)}">${escapeHtml(SEVERITY_LABEL[f.severity] || f.severity)}</span> ${escapeHtml(f.title)}
+            ${f.howToFix ? `<div class="pub-card__fix"><strong>수정 방법:</strong> ${escapeHtml(f.howToFix)}</div>` : ''}
+          </li>`
         )
         .join('');
       const findingsHtml = findings

@@ -508,14 +508,20 @@ function renderHistory(panel, history) {
         </div>`;
       }
       const types = (h.findings || [])
-        .map((f) => `${escapeHtml(f.title)}(${escapeHtml(SEVERITY_LABEL[f.severity] || f.severity)})`)
-        .join(', ');
+        .map(
+          (f) => `<div class="history-finding">
+            <span class="monitor-badge monitor-badge--${escapeHtml(f.severity)}">${escapeHtml(SEVERITY_LABEL[f.severity] || f.severity)}</span>
+            <strong>${escapeHtml(f.title)}</strong>
+            ${f.howToFix ? `<div class="history-finding__fix">수정 방법: ${escapeHtml(f.howToFix)}</div>` : ''}
+          </div>`
+        )
+        .join('');
       return `<div class="monitor-history-row">
         <span class="trigger-tag">${escapeHtml(TRIGGER_LABEL[h.triggeredBy] || h.triggeredBy)}</span>
         <span>${new Date(h.checkedAt).toLocaleString('ko-KR')}</span>
         <span>위반 ${h.total}건 (등급 ${escapeHtml(h.grade || '-')})</span>
-        ${types ? `<span>· ${types}</span>` : ''}
-      </div>`;
+      </div>
+      ${types}`;
     })
     .join('');
 }
