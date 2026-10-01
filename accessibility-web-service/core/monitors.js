@@ -288,7 +288,13 @@ function toPublicDashboard(d) {
           }
         : null,
       trend: (m.trend || []).map((t) => ({ checkedAt: t.checkedAt, total: t.total })),
-      findings: (m.findings || []).map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity })),
+      findings: (m.findings || []).map((f) => ({
+        ruleId: f.ruleId,
+        title: f.title,
+        severity: f.severity,
+        explanation: f.explanation,
+        howToFix: f.howToFix,
+      })),
     })),
   };
 }

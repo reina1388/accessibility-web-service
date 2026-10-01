@@ -84,8 +84,16 @@ async function runCheck(monitor, cfg, triggeredBy) {
       bySeverity,
       score: result.score,
       grade: result.grade,
-      // 상세 설명/스크린샷은 제외하고, 목록·대시보드 표시에 필요한 정보만 저장합니다.
-      findings: result.findings.map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity })),
+      // 스크린샷은 제외하지만(자동 검사는 캡처 자체를 안 함), 무엇이 문제고 어떻게 고치는지는
+      // 대시보드·공개 화면에 그대로 보여줘야 하므로 함께 저장합니다.
+      findings: result.findings.map((f) => ({
+        ruleId: f.ruleId,
+        title: f.title,
+        severity: f.severity,
+        explanation: f.explanation,
+        howToFix: f.howToFix,
+        kwcagRef: f.kwcagRef,
+      })),
     };
 
     await monitorsStore.recordCheck(monitor.id, entry);
