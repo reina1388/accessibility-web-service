@@ -347,7 +347,7 @@ a.pub-card__url:hover { text-decoration: underline; color: var(--accent); }
 .dash-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .dash-table th, .dash-table td { text-align: left; vertical-align: top; padding: 9px 8px; border-bottom: 1px solid var(--border); }
 .dash-table th { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
-.dash-url { max-width: 240px; word-break: break-all; font-weight: 600; }
+.dash-url { white-space: nowrap; font-weight: 600; }
 .dash-section-title { margin: 18px 0 6px; font-size: 13px; font-weight: 700; }
 .dash-top { margin: 0; padding-left: 18px; font-size: 13px; }
 .dash-top li { margin: 5px 0; }
@@ -390,7 +390,17 @@ a.pub-card__url:hover { text-decoration: underline; color: var(--accent); }
   .hero h1 { font-size: 26px; }
   .steps { grid-template-columns: minmax(0, 1fr); }
   .overview { flex-direction: column; align-items: stretch; gap: 14px; }
-  .topbar__nav a:not(.keep) { display: none; }
   .panel { padding: 18px; }
   .checklist .name { width: 80px; }
+
+  /* 검사하기 버튼: 입력창처럼 꽉 차게 늘려서 어중간하게 작은 버튼으로 뜨지 않게 합니다. */
+  .hero-form #submit-btn { flex: 1 1 100%; }
+
+  /* 헤더: 메뉴를 숨기지 않고, 좁은 화면에서도 전부 보이되 줄바꿈으로 자연스럽게 내려가게 합니다.
+     "로그아웃" 같은 단어가 중간에서 끊기지 않도록 nowrap 처리. */
+  .topbar__inner { flex-wrap: wrap; height: auto; padding: 10px 16px; row-gap: 6px; }
+  .brand { font-size: 14.5px; }
+  .brand__tag { font-size: 10px; padding: 1px 6px; }
+  .topbar__nav { flex-wrap: wrap; gap: 2px; }
+  .topbar__nav a, .topbar__nav button { white-space: nowrap; padding: 6px 8px; font-size: 12.5px; }
 }
