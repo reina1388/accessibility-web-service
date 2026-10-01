@@ -633,7 +633,8 @@ function featureRealResult(monitor) {
     })
     .join('');
 
-  const topFinding = (monitor.findings || [])[0];
+  const allFindings = monitor.findings || [];
+  const topFinding = allFindings[0];
   const findingHtml = topFinding
     ? `<div class="sample__finding">
         <div class="sample__finding-head">
@@ -642,6 +643,23 @@ function featureRealResult(monitor) {
           <span class="meta">마지막 검사: ${escapeHtml(pubDate(l.checkedAt))}</span>
         </div>
         ${topFinding.howToFix ? `<p class="sample__fix"><strong>수정 방법:</strong> ${escapeHtml(topFinding.howToFix)}</p>` : ''}
+        ${
+          allFindings.length > 1
+            ? `<details class="pub-card__details" style="margin-top:12px;">
+                <summary>위반 항목 ${allFindings.length}건 전체 보기</summary>
+                <ul>
+                  ${allFindings
+                    .map(
+                      (f) => `<li>
+                        <span class="monitor-badge monitor-badge--${escapeHtml(f.severity)}">${escapeHtml(SEVERITY_LABEL[f.severity] || f.severity)}</span> ${escapeHtml(f.title)}
+                        ${f.howToFix ? `<div class="pub-card__fix"><strong>수정 방법:</strong> ${escapeHtml(f.howToFix)}</div>` : ''}
+                      </li>`
+                    )
+                    .join('')}
+                </ul>
+              </details>`
+            : ''
+        }
       </div>`
     : '';
 
